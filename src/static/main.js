@@ -4,7 +4,7 @@ const API_BASE = window.location.hostname.includes("127.0.0.1")
 : "https://crosswordgame-272p.onrender.com";
 
 let filename = "./puzzles/CrossSampler 1 Easy.puz";
-import { buildGrid } from "./src/crossword.js";
+import { buildGrid } from "../crossword.js";
 
 
 
