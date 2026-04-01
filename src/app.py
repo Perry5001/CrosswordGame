@@ -1,7 +1,7 @@
 import puz
 from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
-import main as main
+import app as app
 import os
 
 app = Flask(__name__, static_folder='static')
