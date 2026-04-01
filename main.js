@@ -2,7 +2,7 @@ import { buildGrid } from "./crossword.js";
 
 const API_BASE = window.location.hostname.includes("127.0.0.1")
 ? "http://127.0.0.1:5000"
-: "https://handwriting-analyzer-e146.onrender.com/";
+: "https://perry5001.github.io/CrosswordGame/";
 
 let filename = 'CrossSampler 1 Easy.puz'
 
