@@ -1,7 +1,6 @@
 import puz
 from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
-import app as app
 import os
 
 app = Flask(__name__, static_folder='static')
@@ -19,6 +18,7 @@ def call_crossword():
     arg = data.get('arg', '')
     print(arg)
     result = load_puzzle(arg).__dict__
+    print(result)
     result['unk1'] = result['unk1'].decode()
     result['unk2'] = result['unk2'].decode()
     result['version'] = result['version'].decode()
