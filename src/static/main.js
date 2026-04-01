@@ -1,4 +1,4 @@
-import { buildGrid } from "../crossword.js";
+import { buildGrid } from "src/crossword.js";
 
 const API_BASE = window.location.hostname.includes("127.0.0.1")
 ? "http://127.0.0.1:5000"
