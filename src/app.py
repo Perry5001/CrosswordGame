@@ -11,6 +11,9 @@ def load_puzzle(filename):
 
     return p
 
+@app.route('/')
+def serve_index():
+  return send_from_directory('.', 'index.html')
 
 @app.route('/call-crossword', methods=['POST'])
 def call_crossword():
