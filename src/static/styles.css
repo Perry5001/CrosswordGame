@@ -73,7 +73,7 @@ button.active { background: #e8e8e8; border-color: #999; }
     color: #888;
 }
 
-.grid-wrap { overflow: auto; margin-bottom: 1rem; }
+.grid-wrap { overflow: auto; margin-bottom: 1rem; display: flex;}
 
 .grid {
     display: inline-grid;
@@ -123,6 +123,31 @@ button.active { background: #e8e8e8; border-color: #999; }
     cursor: pointer;
     padding: 0;
     padding-top: 8px;
+}
+
+.clues{
+    margin-left: 7px;
+    width: -webkit-fill-available;
+    display: flex;
+}
+
+.across, .down {
+    width: -webkit-fill-available;
+}
+
+#acrossList, #downList {
+    list-style: none;
+    padding-left: 0;
+}
+
+.clue:hover {
+  background-color: #ffff00; /* Yellow highlight */
+  color: #000;
+  cursor: pointer;
+}
+.clue.focused-clue {
+    background-color: #ffeb3b; /* Lighter yellow for focused clue */
+    color: #000;
 }
 
 #hint {

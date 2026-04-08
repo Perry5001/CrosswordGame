@@ -6,9 +6,12 @@ import os
 app = Flask(__name__, static_folder='static')
 CORS(app)  # Allow requests from JS (like http://localhost:5500)
 
+global puzzle
+
 def load_puzzle(filename):
     p = puz.read(filename)
-
+    global puzzle
+    puzzle = p
     return p
 
 @app.route('/')
@@ -19,9 +22,8 @@ def serve_index():
 def call_crossword():
     data = request.json
     arg = data.get('arg', '')
-    print(arg)
-    result = load_puzzle(arg).__dict__
-    print(result)
+    puzz = load_puzzle(arg)
+    result = puzz.__dict__
     result['unk1'] = result['unk1'].decode()
     result['unk2'] = result['unk2'].decode()
     result['version'] = result['version'].decode()
@@ -29,6 +31,14 @@ def call_crossword():
     result['postscript'] = result['postscript'].decode()
     result['fileversion'] = result['fileversion'].decode()
     return jsonify({"message": result})
+
+@app.route('/call-clues', methods=['POST'])
+def call_clues():
+    data = request.json
+    arg = data.get('arg', '')
+    result = puzzle.clue_numbering().__dict__
+    return jsonify({"across": result['across'], "down": result['down']})
+
 
 if __name__ == '__main__':
     app.run(port=5000)

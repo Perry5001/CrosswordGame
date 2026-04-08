@@ -1,23 +1,16 @@
+import { highlightClue } from "./main.js";
+
 let rows = 15, cols = 15;
-let cells = [];
-let mode = 'fill';
+export let cells = [];
 let focusedR = -1, focusedC = -1;
 let direction = 'across';
-
-function setMode(m) {
-    mode = m;
-    document.getElementById('btn-fill').classList.toggle('active', m === 'fill');
-    document.getElementById('btn-block').classList.toggle('active', m === 'block');
-    document.getElementById('hint').textContent = m === 'fill'
-        ? 'Click a white square to start typing. Arrow keys to navigate. Arrow key direction sets across/down.'
-        : 'Click any square to toggle it black/white. Black squares create word boundaries.';
-}
+export let cellSize = 40;
 
 export function buildGrid(r, c, fill) {
     rows = r; cols = c;
     const grid = document.getElementById('grid');
     grid.innerHTML = '';
-    grid.style.gridTemplateColumns = `repeat(${cols}, 40px)`;
+    grid.style.gridTemplateColumns = `repeat(${cols}, ${cellSize}px)`;
     cells = [];
     focusedR = -1; focusedC = -1;
 
@@ -44,7 +37,7 @@ export function buildGrid(r, c, fill) {
 
             cell.addEventListener('mousedown', e => onCellClick(e, r, c));
             grid.appendChild(cell);
-            cells[r][c] = { div: cell, inp, isBlack: false, num: numEl };
+            cells[r][c] = { div: cell, inp, isBlack: false, num: numEl};
         }
     }
 
@@ -54,18 +47,16 @@ export function buildGrid(r, c, fill) {
                 toggleBlack(r, c);
 
     numberCells();
+    numberCellClues();
 }
 
 function onCellClick(e, r, c) {
-    if (mode === 'block') {
-        e.preventDefault();
-        toggleBlack(r, c);
-        return;
-    }
     if (cells[r][c].isBlack) { e.preventDefault(); return; }
     if (focusedR === r && focusedC === c) {
         direction = direction === 'across' ? 'down' : 'across';
-        highlightWord(r, c);
+        highlightWord(r, c, direction);
+        const clueNum = direction === 'across' ? cells[r][c].div.dataset.acrossClue : cells[r][c].div.dataset.downClue;
+        highlightClue(r, c, clueNum);
     }
 }
 
@@ -76,21 +67,24 @@ function toggleBlack(r, c) {
     cell.inp.disabled = cell.isBlack;
     cell.inp.value = '';
     numberCells();
-    highlightWord(focusedR, focusedC);
+    highlightWord(focusedR, focusedC, direction);
 }
 
-function onFocus(r, c) {
+export function onFocus(r, c, dir = null) {
+    dir = dir ? dir : direction;
     focusedR = r; focusedC = c;
-    highlightWord(r, c);
+    highlightWord(r, c, dir);
+    const clueNum = dir === 'across' ? cells[r][c].div.dataset.acrossClue : cells[r][c].div.dataset.downClue;
+    highlightClue(r, c, clueNum);
 }
 
-function highlightWord(r, c) {
+export function highlightWord(r, c, dir) {
     for (let rr = 0; rr < rows; rr++)
         for (let cc = 0; cc < cols; cc++)
             cells[rr][cc].div.classList.remove('focused', 'word-highlight');
     if (r < 0 || c < 0) return;
     cells[r][c].div.classList.add('focused');
-    if (direction === 'across') {
+    if (dir === 'across') {
         let start = c;
         while (start > 0 && !cells[r][start - 1].isBlack) start--;
         let end = c;
@@ -187,6 +181,27 @@ function numberCells() {
             const downStart = (r === 0 || cells[r - 1][c].isBlack) && (r + 1 < rows && !cells[r + 1][c].isBlack);
             if (acrossStart || downStart) cell.num.textContent = n++;
         }
+}
+
+function numberCellClues() {
+    for (let r = 0; r < rows; r++){
+        for (let c = 0; c < cols; c++) {
+            const cell = cells[r][c];
+            if (cell.isBlack) continue;
+            for(let rr = r-1; rr >= -1; rr--) {
+                if (rr === -1 || cells[rr][c].isBlack){
+                    cell.div.dataset.downClue = cells[rr+1][c].num.textContent;
+                    break;
+                }
+            }
+            for(let cc = c-1; cc >= -1; cc--) {
+                if (cc === -1 || cells[r][cc].isBlack){
+                    cell.div.dataset.acrossClue = cells[r][cc+1].num.textContent;
+                    break;
+                }
+            }
+        }
+    }
 }
 
 function clearLetters() {
