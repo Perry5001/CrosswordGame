@@ -83,17 +83,17 @@ function start(crossword){
 }
 
 function clueOnClick(r, c, dir){
-    highlightClue(r, c);
+    highlightClue(r, c, null, dir);
     const cell = document.querySelector(`[data-r="${r}"][data-c="${c}"]`);
     cell.querySelector('input').focus();
     onFocus(r, c, dir);
 }
 
-export function highlightClue(r, c, clueNum = null) {
+export function highlightClue(r, c, clueNum = null, dir) {
     for (const clue of cluesObjects) {
         clue.div.classList.remove("focused-clue");
     }
-    const clue = clueNum ? document.querySelector(`.clue[data-num="${clueNum}"]`) : document.querySelector(`.clue[data-r="${r}"][data-c="${c}"]`);
+    const clue = clueNum ? document.querySelector(`.clue[data-num="${clueNum}"][data-dir="${dir}"]`) : document.querySelector(`.clue[data-r="${r}"][data-c="${c}"]`);
     clue.classList.add("focused-clue");
 }
 
