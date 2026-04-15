@@ -4,6 +4,8 @@ const receiverId = document.getElementById('dest-id').value.trim();
 const peer = new Peer();
 
 peer.on('open', () => {
+    console.log("My peer ID:", peer.id);
+    // Share this ID with the sender 
     const conn = peer.connect(receiverId);
 
     conn.on('open', () => {
