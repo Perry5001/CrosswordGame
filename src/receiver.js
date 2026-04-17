@@ -1,8 +1,8 @@
 // Create peer with auto-generated ID
-const peer = new Peer('id-receiver');
+const peer = new Peer('1234');
 
 peer.on('open', (id) => {
-    console.log("My peer ID:", id);
+    console.log('Invite link: yoursite.com/join?id=' + id);
     document.getElementById('peer-id').textContent = `Your Peer ID: ${id}`;
     // Share this ID with the sender
 });
