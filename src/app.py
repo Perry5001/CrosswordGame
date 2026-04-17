@@ -18,6 +18,14 @@ def load_puzzle(filename):
 def serve_index():
   return send_from_directory('.', 'index.html')
 
+@app.route('/connector.html')
+def serve_connector():
+  return send_from_directory('.', 'connector.html')
+
+@app.route('/receiver.html')
+def serve_receiver():
+  return send_from_directory('.', 'receiver.html')
+
 @app.route('/call-crossword', methods=['POST'])
 def call_crossword():
     data = request.json
