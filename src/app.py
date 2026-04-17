@@ -26,6 +26,10 @@ def serve_connector():
 def serve_receiver():
   return send_from_directory('.', 'receiver.html')
 
+@app.route('/receiver.js')
+def serve_receiver():
+  return send_from_directory('.', 'receiver.js')
+
 @app.route('/call-crossword', methods=['POST'])
 def call_crossword():
     data = request.json
