@@ -1,4 +1,4 @@
-import { buildGrid, cellSize, onFocus, setHighlightClue } from "./crossword.js";
+import { buildGrid, cellSize, onFocus, setHighlightClue, setOnCellChange, applyRemoteCell } from "./crossword.js";
 
 const API_BASE = window.location.hostname.includes("127.0.0.1")
     ? "http://127.0.0.1:5000"
@@ -20,6 +20,13 @@ function highlightClue(r, c, clueNum = null, dir) {
 }
 
 setHighlightClue(highlightClue);
+
+// When the host types, broadcast to all connected guests
+setOnCellChange((r, c, value) => {
+    for (const conn of connections) {
+        if (conn.open) conn.send({ type: "cell", r, c, value });
+    }
+});
 
 // ── PeerJS ───────────────────────────────────────────────────────────────────
 
@@ -68,19 +75,30 @@ peer.on('connection', (conn) => {
         }
     });
 
-    conn.on('data', (data) => console.log("From guest:", data));
+    conn.on('data', (data) => {
+        if (data?.type === "cell") {
+            // Apply to host's own grid
+            applyRemoteCell(data.r, data.c, data.value);
+            // Broadcast to all other guests
+            for (const other of connections) {
+                if (other !== conn && other.open) {
+                    other.send({ type: "cell", r: data.r, c: data.c, value: data.value });
+                }
+            }
+        }
+    });
     conn.on('close', () => { connections = connections.filter(c => c !== conn); });
 });
 
 // ── Puzzle upload ─────────────────────────────────────────────────────────────
- 
+
 document.getElementById('fileInput').addEventListener('change', (e) => {
     const file = e.target.files[0];
     if (!file) return;
- 
+
     const status = document.getElementById('upload-status');
     status.textContent = "Parsing puzzle…";
- 
+
     // Read the file as raw bytes, then base64 encode before sending.
     // This guarantees the server receives identical bytes regardless of
     // platform newline handling or multipart encoding quirks.
@@ -93,7 +111,7 @@ document.getElementById('fileInput').addEventListener('change', (e) => {
             binary += String.fromCharCode(bytes[i]);
         }
         const base64 = btoa(binary);
- 
+
         fetch(`${API_BASE}/upload-puzzle`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },

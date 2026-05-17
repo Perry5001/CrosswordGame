@@ -1,4 +1,4 @@
-import { buildGrid, cellSize, onFocus, setHighlightClue } from "./crossword.js";
+import { buildGrid, cellSize, onFocus, setHighlightClue, setOnCellChange, applyRemoteCell } from "./crossword.js";
 
 const log = (msg) => {
     const el = document.getElementById("log");
@@ -19,6 +19,11 @@ function highlightClue(r, c, clueNum = null, dir) {
 }
 
 setHighlightClue(highlightClue);
+
+// When the guest types, send to host
+setOnCellChange((r, c, value) => {
+    if (conn && conn.open) conn.send({ type: "cell", r, c, value });
+});
 
 // ── Render (everything comes from the host over P2P) ─────────────────────────
 
@@ -116,6 +121,8 @@ function connect() {
         if (data?.type === "init" && data.crossword) {
             log(`📩 Received: ${data.crossword.title || "puzzle"}`);
             renderPuzzle(data.crossword);
+        } else if (data?.type === "cell") {
+            applyRemoteCell(data.r, data.c, data.value);
         }
     });
 

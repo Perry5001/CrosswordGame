@@ -3,6 +3,17 @@
 let _highlightClue = () => {};
 export function setHighlightClue(fn) { _highlightClue = fn; }
 
+// Fired whenever a cell value changes locally — host/guest use this to sync
+let _onCellChange = () => {};
+export function setOnCellChange(fn) { _onCellChange = fn; }
+
+// Apply a remote cell update without firing _onCellChange (prevents echo)
+export function applyRemoteCell(r, c, value) {
+    if (cells[r] && cells[r][c] && !cells[r][c].isBlack) {
+        cells[r][c].inp.value = value;
+    }
+}
+
 let rows = 15, cols = 15;
 export let cells = [];
 let focusedR = -1, focusedC = -1;
@@ -112,6 +123,7 @@ function onInput(e, inp, r, c) {
     let val = inp.value.replace(/[^a-zA-Z]/g, '');
     if (val.length > 1) val = val[val.length - 1];
     inp.value = val.toUpperCase();
+    _onCellChange(r, c, inp.value);
     if (val.length === 1) advance(r, c);
 }
 
@@ -163,6 +175,7 @@ function retreat(r, c) {
     const nr = r + dr, nc = c + dc;
     if (nr >= 0 && nr < rows && nc >= 0 && nc < cols && !cells[nr][nc].isBlack) {
         cells[nr][nc].inp.value = '';
+        _onCellChange(nr, nc, '');
         cells[nr][nc].inp.focus();
     }
 }
