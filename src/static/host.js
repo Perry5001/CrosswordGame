@@ -73,39 +73,52 @@ peer.on('connection', (conn) => {
 });
 
 // ── Puzzle upload ─────────────────────────────────────────────────────────────
-
+ 
 document.getElementById('fileInput').addEventListener('change', (e) => {
     const file = e.target.files[0];
     if (!file) return;
-
+ 
     const status = document.getElementById('upload-status');
     status.textContent = "Parsing puzzle…";
-
-    const formData = new FormData();
-    formData.append('file', file);
-
-    fetch(`${API_BASE}/upload-puzzle`, {
-        method: 'POST',
-        body: formData
-    })
-    .then(r => r.json())
-    .then(data => {
-        if (data.error) {
-            status.textContent = `Error: ${data.error}`;
-            return;
+ 
+    // Read the file as raw bytes, then base64 encode before sending.
+    // This guarantees the server receives identical bytes regardless of
+    // platform newline handling or multipart encoding quirks.
+    const reader = new FileReader();
+    reader.onload = () => {
+        // reader.result is an ArrayBuffer — convert to base64 string
+        const bytes = new Uint8Array(reader.result);
+        let binary = '';
+        for (let i = 0; i < bytes.length; i++) {
+            binary += String.fromCharCode(bytes[i]);
         }
-        crossword = data;
-        status.textContent = `Loaded: ${crossword.title || file.name}`;
-        renderPuzzle(crossword);
-        // Push to any guests already connected
-        for (const conn of connections) {
-            if (conn.open) conn.send({ type: "init", crossword });
-        }
-    })
-    .catch(err => {
-        status.textContent = "Upload failed — is the server running?";
-        console.error(err);
-    });
+        const base64 = btoa(binary);
+ 
+        fetch(`${API_BASE}/upload-puzzle`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ bytes: base64 })
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.error) {
+                status.textContent = `Error: ${data.error}`;
+                return;
+            }
+            crossword = data;
+            status.textContent = `Loaded: ${crossword.title || file.name}`;
+            renderPuzzle(crossword);
+            // Push to any guests already connected
+            for (const conn of connections) {
+                if (conn.open) conn.send({ type: "init", crossword });
+            }
+        })
+        .catch(err => {
+            status.textContent = "Upload failed — is the server running?";
+            console.error(err);
+        });
+    };
+    reader.readAsArrayBuffer(file);
 });
 
 // ── Render ───────────────────────────────────────────────────────────────────

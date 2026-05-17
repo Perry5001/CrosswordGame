@@ -1,6 +1,7 @@
 import puz
 import io
 import os
+import base64
 import tempfile
 from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
@@ -24,18 +25,20 @@ def serve_guest():
  
 @app.route('/upload-puzzle', methods=['POST'])
 def upload_puzzle():
-    if 'file' not in request.files:
-        return jsonify({"error": "No file uploaded"}), 400
+    data = request.get_json()
+    if not data or 'bytes' not in data:
+        return jsonify({"error": "No file data received"}), 400
  
-    f = request.files['file']
-    if not f.filename.endswith('.puz'):
-        return jsonify({"error": "File must be a .puz file"}), 400
- 
-    # puz.read() expects a real file path, not a file-like object.
-    # Write to a temp file, read it, then clean up.
-    tmp = tempfile.NamedTemporaryFile(suffix='.puz', delete=False)
     try:
-        f.save(tmp.name)
+        # Decode base64 back to raw bytes
+        raw_bytes = base64.b64decode(data['bytes'])
+    except Exception as e:
+        return jsonify({"error": f"Failed to decode file: {str(e)}"}), 400
+ 
+    # Write explicitly in binary mode — prevents any newline or null byte mangling
+    tmp = tempfile.NamedTemporaryFile(suffix='.puz', delete=False, mode='wb')
+    try:
+        tmp.write(raw_bytes)
         tmp.close()
         p = puz.read(tmp.name)
     except Exception as e:
