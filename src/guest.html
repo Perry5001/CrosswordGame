@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Crossword Guest</title>
+    <link rel="stylesheet" href="static/styles.css">
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <script type="module" src="static/guest.js" defer></script>
+</head>
+    <body>
+    <div class ="header">
+        <h1>Crossword Grid</h1>
+        <p id="log"></p>
+    </div>
+
+    <div class="grid-wrap">
+        <div class="grid" id="grid"></div>
+            <div class="clues">
+                <div class="across">
+                    <h2>Across</h2>
+                    <ol id="acrossList"></ol>
+                </div>
+                    <div class="down">
+                    <h2>Down</h2>
+                <ol id="downList"></ol>
+            </div>
+        </div>
+    </div>
+    <div id="hint">Click a white square to start typing. Arrow keys to navigate</div>
+</body>
+</html>
