@@ -1,4 +1,4 @@
-const randomStr = 12345;
+const randomStr = Math.random().toString(36).slice(2, 8);
 const peer = new Peer(randomStr);
 
 const API_BASE = window.location.hostname.includes("127.0.0.1")
