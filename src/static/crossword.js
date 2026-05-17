@@ -12,6 +12,7 @@ let acrosses_clue_nums = [], downs_clue_nums = [];
 
 export function buildGrid(r, c, fill) {
     rows = r; cols = c;
+    acrosses_clue_nums = []; downs_clue_nums = [];
     const grid = document.getElementById('grid');
     grid.innerHTML = '';
     grid.style.gridTemplateColumns = `repeat(${cols}, ${cellSize}px)`;
@@ -41,18 +42,17 @@ export function buildGrid(r, c, fill) {
 
             cell.addEventListener('mousedown', e => onCellClick(e, r, c));
             grid.appendChild(cell);
-            cells[r][c] = { div: cell, inp, isBlack: false, num: numEl};
+            cells[r][c] = { div: cell, inp, isBlack: false, num: numEl };
         }
     }
 
     for (let r = 0; r < rows; r++)
         for (let c = 0; c < cols; c++)
-            if (fill[r*cols+c] === '.')
+            if (fill[r * cols + c] === '.')
                 toggleBlack(r, c);
 
     numberCells();
     numberCellClues();
-    console.log(acrosses_clue_nums, downs_clue_nums);
 }
 
 function onCellClick(e, r, c) {
@@ -60,8 +60,10 @@ function onCellClick(e, r, c) {
     if (focusedR === r && focusedC === c) {
         direction = direction === 'across' ? 'down' : 'across';
         highlightWord(r, c, direction);
-        const clueNum = direction === 'across' ? cells[r][c].div.dataset.acrossClue : cells[r][c].div.dataset.downClue;
-        highlightClue(r, c, clueNum, direction);
+        const clueNum = direction === 'across'
+            ? cells[r][c].div.dataset.acrossClue
+            : cells[r][c].div.dataset.downClue;
+        _highlightClue(r, c, clueNum, direction);
     }
 }
 
@@ -77,8 +79,10 @@ export function onFocus(r, c, dir = null) {
     direction = dir ? dir : direction;
     focusedR = r; focusedC = c;
     highlightWord(r, c, direction);
-    const clueNum = direction === 'across' ? cells[r][c].div.dataset.acrossClue : cells[r][c].div.dataset.downClue;
-    highlightClue(r, c, clueNum, direction);
+    const clueNum = direction === 'across'
+        ? cells[r][c].div.dataset.acrossClue
+        : cells[r][c].div.dataset.downClue;
+    _highlightClue(r, c, clueNum, direction);
 }
 
 export function highlightWord(r, c, dir) {
@@ -124,15 +128,14 @@ function onKey(e, r, c) {
     }
 }
 
-function move(r, c, dr, dc, oldDir = direction, mode="arrow") {
+function move(r, c, dr, dc, oldDir = direction, mode = "arrow") {
     let nr = r + dr, nc = c + dc;
     let update = false;
-    if(dr != 0 && oldDir == 'across') { nr = r; update = true;}
-    else if(dc != 0 && oldDir == 'down') { nc = c; update = true;}
-    else if (mode === "input" && ((nr < 0 || nr >= rows) || (nc < 0 || nc >= cols) || cells[nr][nc].isBlack)){
-        nr = nr-dr; nc = nc-dc;
-    }
-    else{
+    if (dr !== 0 && oldDir === 'across') { nr = r; update = true; }
+    else if (dc !== 0 && oldDir === 'down') { nc = c; update = true; }
+    else if (mode === "input" && ((nr < 0 || nr >= rows) || (nc < 0 || nc >= cols) || cells[nr][nc].isBlack)) {
+        nr = nr - dr; nc = nc - dc;
+    } else {
         while (nr >= 0 && nr < rows && nc >= 0 && nc < cols && cells[nr][nc].isBlack) {
             nr += dr; nc += dc;
         }
@@ -142,8 +145,10 @@ function move(r, c, dr, dc, oldDir = direction, mode="arrow") {
         cells[nr][nc].inp.focus();
         cells[nr][nc].inp.select();
         highlightWord(nr, nc, direction);
-        const clueNum = direction === 'across' ? cells[nr][nc].div.dataset.acrossClue : cells[nr][nc].div.dataset.downClue;
-        highlightClue(nr, nc, clueNum, direction);
+        const clueNum = direction === 'across'
+            ? cells[nr][nc].div.dataset.acrossClue
+            : cells[nr][nc].div.dataset.downClue;
+        _highlightClue(nr, nc, clueNum, direction);
     }
 }
 
@@ -163,39 +168,18 @@ function retreat(r, c) {
 }
 
 function advanceWord(r, c, step) {
-    let nr = r, nc = c;
     if (direction === 'across') {
         let index = acrosses_clue_nums.indexOf(cells[r][c].div.dataset.acrossClue) + step;
         index = (index < 0 || index >= acrosses_clue_nums.length) ? index - step : index;
-        console.log(index, acrosses_clue_nums[index]);
         const clue_num = acrosses_clue_nums[index];
         const clue = document.querySelector(`[data-num="${clue_num}"][data-dir="across"]`);
-        const nr = parseInt(clue.dataset.r);
-        const nc = parseInt(clue.dataset.c);
-
-        cells[nr][nc].inp.focus();
-        return;
+        cells[parseInt(clue.dataset.r)][parseInt(clue.dataset.c)].inp.focus();
     } else {
         let index = downs_clue_nums.indexOf(cells[r][c].div.dataset.downClue) + step;
         index = (index < 0 || index >= downs_clue_nums.length) ? index - step : index;
-        console.log(index, downs_clue_nums[index]);
         const clue_num = downs_clue_nums[index];
         const clue = document.querySelector(`[data-num="${clue_num}"][data-dir="down"]`);
-        const nr = parseInt(clue.dataset.r);
-        const nc = parseInt(clue.dataset.c);
-
-        cells[nr][nc].inp.focus();
-        return;
-
-
-        // nr += step;
-        // while (nc >= 0 && nc < cols) {
-        //     while (nr >= 0 && nr < rows) {
-        //         if (!cells[nr][nc].isBlack) { cells[nr][nc].inp.focus(); return; }
-        //         nr += step;
-        //     }
-        //     nc += step; nr = step > 0 ? 0 : rows - 1;
-        // }
+        cells[parseInt(clue.dataset.r)][parseInt(clue.dataset.c)].inp.focus();
     }
 }
 
@@ -215,41 +199,22 @@ function numberCells() {
 }
 
 function numberCellClues() {
-    for (let r = 0; r < rows; r++){
+    for (let r = 0; r < rows; r++) {
         for (let c = 0; c < cols; c++) {
             const cell = cells[r][c];
             if (cell.isBlack) continue;
-            for(let rr = r-1; rr >= -1; rr--) {
-                if (rr === -1 || cells[rr][c].isBlack){
-                    cell.div.dataset.downClue = cells[rr+1][c].num.textContent;
+            for (let rr = r - 1; rr >= -1; rr--) {
+                if (rr === -1 || cells[rr][c].isBlack) {
+                    cell.div.dataset.downClue = cells[rr + 1][c].num.textContent;
                     break;
                 }
             }
-            for(let cc = c-1; cc >= -1; cc--) {
-                if (cc === -1 || cells[r][cc].isBlack){
-                    cell.div.dataset.acrossClue = cells[r][cc+1].num.textContent;
+            for (let cc = c - 1; cc >= -1; cc--) {
+                if (cc === -1 || cells[r][cc].isBlack) {
+                    cell.div.dataset.acrossClue = cells[r][cc + 1].num.textContent;
                     break;
                 }
             }
         }
     }
-}
-
-function clearLetters() {
-    for (let r = 0; r < rows; r++)
-        for (let c = 0; c < cols; c++)
-            cells[r][c].inp.value = '';
-}
-
-function clearAll() {
-    for (let r = 0; r < rows; r++)
-        for (let c = 0; c < cols; c++) {
-            const cell = cells[r][c];
-            cell.isBlack = false;
-            cell.div.className = 'cell white';
-            cell.inp.disabled = false;
-            cell.inp.value = '';
-            cell.num.textContent = '';
-        }
-    numberCells();
 }
