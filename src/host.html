@@ -3,29 +3,36 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Document</title>
+    <title>Crossword Host</title>
     <link rel="stylesheet" href="static/styles.css">
     <script src="https://unpkg.com/peerjs@1.5.5/dist/peerjs.min.js"></script>
     <script type="module" src="static/host.js" defer></script>
 </head>
 <body>
-    <div id="peer-id"></div>
-    <div id="received-data"></div>
-
+    <div class="header">
+        <h1>Crossword Host</h1>
+        <div style="display:flex; align-items:center; gap:12px;">
+            <input type="file" id="fileInput" accept=".puz">
+            <span id="upload-status" style="font-size:0.9em; color:#666;"></span>
+        </div>
+        <div id="peer-id" style="margin-top:8px;"></div>
+    </div>
+ 
     <div class="grid-wrap">
-    <div class="grid" id="grid"></div>
-    <div class="clues">
-        <div class="across">
-        <h2>Across</h2>
-        <ol id="acrossList"></ol>
-        </div>
-        <div class="down">
-        <h2>Down</h2>
-        <ol id="downList"></ol>
+        <div class="grid" id="grid"></div>
+        <div class="clues">
+            <div class="across">
+                <h2>Across</h2>
+                <ol id="acrossList"></ol>
+            </div>
+            <div class="down">
+                <h2>Down</h2>
+                <ol id="downList"></ol>
+            </div>
         </div>
     </div>
-    </div>
-    <div id="hint">Click a white square to start typing. Arrow keys to navigate</div>
-
+ 
+    <div id="hint">Upload a .puz file to begin. Share the link with your partner.</div>
 </body>
 </html>
+ 

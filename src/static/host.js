@@ -1,19 +1,12 @@
-// filename is attached to the crossword object before sending so the guest
-// can request clues for the same puzzle from the shared server.
-import { buildGrid, cellSize, highlightWord, onFocus, setHighlightClue } from "./crossword.js";
-
-const randomStr = Math.random().toString(36).slice(2, 8);
-const peer = new Peer(randomStr);
+import { buildGrid, cellSize, onFocus, setHighlightClue } from "./crossword.js";
 
 const API_BASE = window.location.hostname.includes("127.0.0.1")
     ? "http://127.0.0.1:5000"
     : "https://crosswordgame-272p.onrender.com";
 
-let filename = "./puzzles/CrossSampler 1 Easy.puz";
-
 let cluesObjects = [];
-let crossword;
-let connections = []; // track all connected guests
+let crossword = null;   // holds grid + clues once a puzzle is uploaded
+let connections = [];
 
 // ── Clue highlighting ────────────────────────────────────────────────────────
 
@@ -26,105 +19,35 @@ function highlightClue(r, c, clueNum = null, dir) {
     if (clue) clue.classList.add("focused-clue");
 }
 
-// Wire highlightClue into crossword.js so it doesn't need to import from us
 setHighlightClue(highlightClue);
-
-// ── Clue list builder ────────────────────────────────────────────────────────
-
-function buildClues(clues) {
-    const acrossList = document.getElementById('acrossList');
-    const downList = document.getElementById('downList');
-    acrossList.innerHTML = '';
-    downList.innerHTML = '';
-    cluesObjects = [];
-
-    for (const clue of clues['across']) {
-        const li = document.createElement('li');
-        li.textContent = `${clue['num']}. ${clue['clue']}`;
-        li.classList.add("clue");
-        li.dataset.r = clue['row'];
-        li.dataset.c = clue['col'];
-        li.dataset.num = clue['num'];
-        li.dataset.dir = "across";
-        cluesObjects.push({ div: li });
-        const [r, c] = [clue['row'], clue['col']];
-        li.addEventListener('click', () => clueOnClick(r, c, "across"));
-        acrossList.appendChild(li);
-    }
-    for (const clue of clues['down']) {
-        const li = document.createElement('li');
-        li.textContent = `${clue['num']}. ${clue['clue']}`;
-        li.classList.add("clue");
-        li.dataset.r = clue['row'];
-        li.dataset.c = clue['col'];
-        li.dataset.num = clue['num'];
-        li.dataset.dir = "down";
-        cluesObjects.push({ div: li });
-        const [r, c] = [clue['row'], clue['col']];
-        li.addEventListener('click', () => clueOnClick(r, c, "down"));
-        downList.appendChild(li);
-    }
-}
-
-// ── API calls ────────────────────────────────────────────────────────────────
-
-function getCrossword(arg) {
-    fetch(`${API_BASE}/call-crossword`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ arg })
-    })
-    .then(r => r.text())
-    .then(data => {
-        crossword = JSON.parse(data)['message'];
-        crossword.filename = filename; // carry the filename so guests can request the same puzzle
-        start(crossword);
-    })
-    .catch(err => console.error('Error:', err));
-}
-
-function getClues() {
-    fetch(`${API_BASE}/call-clues`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ arg: "" })
-    })
-    .then(r => r.json())
-    .then(data => buildClues(data))
-    .catch(err => console.error('Error:', err));
-}
-
-// ── Grid setup ───────────────────────────────────────────────────────────────
-
-function start(crossword) {
-    buildGrid(crossword['width'], crossword['height'], crossword['fill']);
-    const acrosslist = document.getElementById('acrossList');
-    const downlist = document.getElementById('downList');
-    acrosslist.style.height = cellSize * crossword['height'] - 28 + 'px';
-    acrosslist.style.overflowY = 'auto';
-    downlist.style.height = cellSize * crossword['height'] - 28 + 'px';
-    downlist.style.overflowY = 'auto';
-    getClues();
-}
-
-function clueOnClick(r, c, dir) {
-    highlightClue(r, c, null, dir);
-    const cell = document.querySelector(`[data-r="${r}"][data-c="${c}"]`);
-    cell.querySelector('input').focus();
-    onFocus(r, c, dir);
-}
 
 // ── PeerJS ───────────────────────────────────────────────────────────────────
 
-getCrossword(filename);
+const peer = new Peer(Math.random().toString(36).slice(2, 8), {
+    config: {
+        iceServers: [
+            { urls: "stun:stun.l.google.com:19302" },
+            { urls: "stun:stun1.l.google.com:19302" },
+            { urls: "stun:stun2.l.google.com:19302" },
+        ]
+    },
+    debug: 2
+});
+
+peer.on('error', (err) => {
+    console.error("PeerJS error:", err.type, err);
+    const el = document.getElementById('peer-id');
+    if (err.type === 'unavailable-id') {
+        el.textContent = "ID conflict — please refresh.";
+    } else {
+        el.textContent = `⚠️ PeerJS error: ${err.type}`;
+    }
+});
 
 peer.on('open', (id) => {
-    console.log('My peer ID:', id);
-    // Build the guest URL relative to the current origin so it works both
-    // locally and on the deployed server.
     const guestURL = `${window.location.origin}/guest?id=${id}`;
     document.getElementById('peer-id').innerHTML =
-        `Share this link with your partner: <a href="${guestURL}">${guestURL}</a>`;
+        `Share with your partner: <a href="${guestURL}">${guestURL}</a>`;
 });
 
 peer.on('connection', (conn) => {
@@ -132,11 +55,10 @@ peer.on('connection', (conn) => {
     connections.push(conn);
 
     conn.on('open', () => {
-        // Send the crossword data as soon as the connection opens
+        // Send puzzle immediately if already loaded, otherwise wait
         if (crossword) {
             conn.send({ type: "init", crossword });
         } else {
-            // Crossword may still be loading — poll briefly
             const wait = setInterval(() => {
                 if (crossword) {
                     conn.send({ type: "init", crossword });
@@ -146,13 +68,96 @@ peer.on('connection', (conn) => {
         }
     });
 
-    conn.on('data', (data) => {
-        console.log("Received from guest:", data);
-        // Future: handle guest letter updates here and broadcast to others
-    });
+    conn.on('data', (data) => console.log("From guest:", data));
+    conn.on('close', () => { connections = connections.filter(c => c !== conn); });
+});
 
-    conn.on('close', () => {
-        connections = connections.filter(c => c !== conn);
-        console.log("Guest disconnected:", conn.peer);
+// ── Puzzle upload ─────────────────────────────────────────────────────────────
+
+document.getElementById('fileInput').addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const status = document.getElementById('upload-status');
+    status.textContent = "Parsing puzzle…";
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    fetch(`${API_BASE}/upload-puzzle`, {
+        method: 'POST',
+        body: formData
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.error) {
+            status.textContent = `Error: ${data.error}`;
+            return;
+        }
+        crossword = data;
+        status.textContent = `Loaded: ${crossword.title || file.name}`;
+        renderPuzzle(crossword);
+        // Push to any guests already connected
+        for (const conn of connections) {
+            if (conn.open) conn.send({ type: "init", crossword });
+        }
+    })
+    .catch(err => {
+        status.textContent = "Upload failed — is the server running?";
+        console.error(err);
     });
 });
+
+// ── Render ───────────────────────────────────────────────────────────────────
+
+function renderPuzzle(cw) {
+    buildGrid(cw.width, cw.height, cw.fill);
+
+    const acrosslist = document.getElementById('acrossList');
+    const downlist   = document.getElementById('downList');
+    acrosslist.style.height = cellSize * cw.height - 28 + 'px';
+    acrosslist.style.overflowY = 'auto';
+    downlist.style.height   = cellSize * cw.height - 28 + 'px';
+    downlist.style.overflowY = 'auto';
+
+    buildClues(cw.clues);
+}
+
+function buildClues(clues) {
+    const acrossList = document.getElementById('acrossList');
+    const downList   = document.getElementById('downList');
+    acrossList.innerHTML = '';
+    downList.innerHTML   = '';
+    cluesObjects = [];
+
+    for (const clue of clues.across) {
+        const li = document.createElement('li');
+        li.textContent = `${clue.num}. ${clue.clue}`;
+        li.classList.add("clue");
+        li.dataset.r   = clue.row;
+        li.dataset.c   = clue.col;
+        li.dataset.num = clue.num;
+        li.dataset.dir = "across";
+        cluesObjects.push({ div: li });
+        li.addEventListener('click', () => clueOnClick(clue.row, clue.col, "across"));
+        acrossList.appendChild(li);
+    }
+    for (const clue of clues.down) {
+        const li = document.createElement('li');
+        li.textContent = `${clue.num}. ${clue.clue}`;
+        li.classList.add("clue");
+        li.dataset.r   = clue.row;
+        li.dataset.c   = clue.col;
+        li.dataset.num = clue.num;
+        li.dataset.dir = "down";
+        cluesObjects.push({ div: li });
+        li.addEventListener('click', () => clueOnClick(clue.row, clue.col, "down"));
+        downList.appendChild(li);
+    }
+}
+
+function clueOnClick(r, c, dir) {
+    highlightClue(r, c, null, dir);
+    document.querySelector(`[data-r="${r}"][data-c="${c}"]`).querySelector('input').focus();
+    onFocus(r, c, dir);
+}

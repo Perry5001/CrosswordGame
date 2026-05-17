@@ -1,15 +1,11 @@
 import { buildGrid, cellSize, onFocus, setHighlightClue } from "./crossword.js";
 
-const API_BASE = window.location.hostname.includes("127.0.0.1")
-    ? "http://127.0.0.1:5000"
-    : "https://crosswordgame-272p.onrender.com";
-
 const log = (msg) => {
     const el = document.getElementById("log");
     if (el) el.textContent += msg + "\n";
 };
 
-// ── Clue list ────────────────────────────────────────────────────────────────
+// ── Clue highlighting ────────────────────────────────────────────────────────
 
 let cluesObjects = [];
 
@@ -24,90 +20,84 @@ function highlightClue(r, c, clueNum = null, dir) {
 
 setHighlightClue(highlightClue);
 
-// ── Clue list builder ────────────────────────────────────────────────────────
+// ── Render (everything comes from the host over P2P) ─────────────────────────
 
-function buildClues(clues, crossword) {
+function renderPuzzle(cw) {
+    buildGrid(cw.width, cw.height, cw.fill);
+
+    const acrosslist = document.getElementById('acrossList');
+    const downlist   = document.getElementById('downList');
+    acrosslist.style.height = cellSize * cw.height - 28 + 'px';
+    acrosslist.style.overflowY = 'auto';
+    downlist.style.height   = cellSize * cw.height - 28 + 'px';
+    downlist.style.overflowY = 'auto';
+
+    buildClues(cw.clues);
+}
+
+function buildClues(clues) {
     const acrossList = document.getElementById('acrossList');
-    const downList = document.getElementById('downList');
+    const downList   = document.getElementById('downList');
     acrossList.innerHTML = '';
-    downList.innerHTML = '';
+    downList.innerHTML   = '';
     cluesObjects = [];
 
-    for (const clue of clues['across']) {
+    for (const clue of clues.across) {
         const li = document.createElement('li');
-        li.textContent = `${clue['num']}. ${clue['clue']}`;
+        li.textContent = `${clue.num}. ${clue.clue}`;
         li.classList.add("clue");
-        li.dataset.r = clue['row'];
-        li.dataset.c = clue['col'];
-        li.dataset.num = clue['num'];
+        li.dataset.r   = clue.row;
+        li.dataset.c   = clue.col;
+        li.dataset.num = clue.num;
         li.dataset.dir = "across";
         cluesObjects.push({ div: li });
-        const [r, c] = [clue['row'], clue['col']];
-        li.addEventListener('click', () => clueOnClick(r, c, "across"));
+        li.addEventListener('click', () => clueOnClick(clue.row, clue.col, "across"));
         acrossList.appendChild(li);
     }
-    for (const clue of clues['down']) {
+    for (const clue of clues.down) {
         const li = document.createElement('li');
-        li.textContent = `${clue['num']}. ${clue['clue']}`;
+        li.textContent = `${clue.num}. ${clue.clue}`;
         li.classList.add("clue");
-        li.dataset.r = clue['row'];
-        li.dataset.c = clue['col'];
-        li.dataset.num = clue['num'];
+        li.dataset.r   = clue.row;
+        li.dataset.c   = clue.col;
+        li.dataset.num = clue.num;
         li.dataset.dir = "down";
         cluesObjects.push({ div: li });
-        const [r, c] = [clue['row'], clue['col']];
-        li.addEventListener('click', () => clueOnClick(r, c, "down"));
+        li.addEventListener('click', () => clueOnClick(clue.row, clue.col, "down"));
         downList.appendChild(li);
     }
-
-    // Size the clue lists to match the grid height
-    const acrossListEl = document.getElementById('acrossList');
-    const downListEl = document.getElementById('downList');
-    acrossListEl.style.height = cellSize * crossword['height'] - 28 + 'px';
-    acrossListEl.style.overflowY = 'auto';
-    downListEl.style.height = cellSize * crossword['height'] - 28 + 'px';
-    downListEl.style.overflowY = 'auto';
 }
 
 function clueOnClick(r, c, dir) {
     highlightClue(r, c, null, dir);
-    const cell = document.querySelector(`[data-r="${r}"][data-c="${c}"]`);
-    cell.querySelector('input').focus();
+    document.querySelector(`[data-r="${r}"][data-c="${c}"]`).querySelector('input').focus();
     onFocus(r, c, dir);
-}
-
-// ── Render crossword received from host ──────────────────────────────────────
-
-function renderCrossword(crossword) {
-    buildGrid(crossword['width'], crossword['height'], crossword['fill']);
-
-    // Pass the puzzle filename so the server loads the right puzzle
-    // even if the host hasn't called /call-crossword on this server instance.
-    const filename = crossword['filename'] || "";
-    fetch(`${API_BASE}/call-clues`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ arg: filename })
-    })
-    .then(r => r.json())
-    .then(data => buildClues(data, crossword))
-    .catch(err => {
-        console.error('Error fetching clues:', err);
-        log("⚠️ Could not load clues from server.");
-    });
 }
 
 // ── PeerJS ───────────────────────────────────────────────────────────────────
 
 const urlParams = new URLSearchParams(window.location.search);
 const hostID = urlParams.get('id');
-console.log("Host ID from URL:", hostID);
 
-const peer = new Peer();
+const peer = new Peer(undefined, {
+    config: {
+        iceServers: [
+            { urls: "stun:stun.l.google.com:19302" },
+            { urls: "stun:stun1.l.google.com:19302" },
+            { urls: "stun:stun2.l.google.com:19302" },
+        ]
+    },
+    debug: 2
+});
+
+peer.on('error', (err) => {
+    log(`⚠️ PeerJS error: ${err.type}`);
+    console.error(err);
+});
+
 let conn = null;
 
-peer.on('open', (id) => {
-    log("Connected as: " + id);
+peer.on('open', () => {
     if (hostID) {
         connect();
     } else {
@@ -116,29 +106,19 @@ peer.on('open', (id) => {
 });
 
 function connect() {
-    if (conn && conn.open) { log("Already connected"); return; }
-    log("Connecting to host " + hostID + "…");
+    if (conn && conn.open) return;
+    log("Connecting to host…");
     conn = peer.connect(hostID);
 
-    conn.on('open', () => {
-        log("✅ Connected to host");
-    });
+    conn.on('open', () => log("✅ Connected — waiting for puzzle…"));
 
     conn.on('data', (data) => {
-        if (data && data.type === "init" && data.crossword) {
-            log("📩 Received crossword from host");
-            renderCrossword(data.crossword);
-        } else {
-            log("📩 Received: " + JSON.stringify(data));
+        if (data?.type === "init" && data.crossword) {
+            log(`📩 Received: ${data.crossword.title || "puzzle"}`);
+            renderPuzzle(data.crossword);
         }
     });
 
-    conn.on('close', () => {
-        log("❌ Connection closed");
-        conn = null;
-    });
-
-    conn.on('error', (err) => {
-        log("⚠️ Error: " + err);
-    });
+    conn.on('close', () => { log("❌ Disconnected"); conn = null; });
+    conn.on('error', (err) => log(`⚠️ ${err}`));
 }

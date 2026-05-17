@@ -1,53 +1,59 @@
 import puz
+import io
 from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
-import os
-
+ 
 app = Flask(__name__, static_folder='static')
-CORS(app)  # Allow requests from JS (like http://localhost:5500)
-
-global puzzle
-
-def load_puzzle(filename):
-    p = puz.read(filename)
-    global puzzle
-    puzzle = p
-    return p
-
+CORS(app)
+ 
+ 
 @app.route('/')
 def serve_index():
-  return send_from_directory('.', 'index.html')
-
-@app.route('/guest')
-def serve_connector():
-  return send_from_directory('.', 'guest.html')
-
+    return send_from_directory('.', 'host.html')
+ 
 @app.route('/host')
-def serve_receiver():
-  return send_from_directory('.', 'host.html')
-
-@app.route('/call-crossword', methods=['POST'])
-def call_crossword():
-    data = request.json
-    arg = data.get('arg', '')
-    puzz = load_puzzle(arg)
-    result = puzz.__dict__
-    result['unk1'] = result['unk1'].decode()
-    result['unk2'] = result['unk2'].decode()
-    result['version'] = result['version'].decode()
-    result['preamble'] = result['preamble'].decode()
-    result['postscript'] = result['postscript'].decode()
-    result['fileversion'] = result['fileversion'].decode()
-    return jsonify({"message": result})
-
-@app.route('/call-clues', methods=['POST'])
-def call_clues():
-    data = request.json
-    arg = data.get('arg', '')
-    result = puzzle.clue_numbering().__dict__
-    return jsonify({"across": result['across'], "down": result['down']})
-
-
+def serve_host():
+    return send_from_directory('.', 'host.html')
+ 
+@app.route('/guest')
+def serve_guest():
+    return send_from_directory('.', 'guest.html')
+ 
+ 
+@app.route('/upload-puzzle', methods=['POST'])
+def upload_puzzle():
+    if 'file' not in request.files:
+        return jsonify({"error": "No file uploaded"}), 400
+ 
+    f = request.files['file']
+    if not f.filename.endswith('.puz'):
+        return jsonify({"error": "File must be a .puz file"}), 400
+ 
+    try:
+        data = f.read()
+        p = puz.read(io.BytesIO(data))
+    except Exception as e:
+        return jsonify({"error": f"Failed to parse puzzle: {str(e)}"}), 400
+ 
+    # Build the grid object
+    result = {
+        "width":  p.width,
+        "height": p.height,
+        "fill":   p.fill,
+        "title":  p.title,
+        "author": p.author,
+    }
+ 
+    # Build clues
+    numbering = p.clue_numbering()
+    result["clues"] = {
+        "across": numbering.across,
+        "down":   numbering.down,
+    }
+ 
+    return jsonify(result)
+ 
+ 
 if __name__ == '__main__':
     app.run(port=5000)
 
