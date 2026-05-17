@@ -1,4 +1,3 @@
-
 const API_BASE = window.location.hostname.includes("127.0.0.1")
 ? "http://127.0.0.1:5000"
 : "https://crosswordgame-272p.onrender.com";

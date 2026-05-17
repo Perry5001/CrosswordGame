@@ -1,4 +1,7 @@
-import { highlightClue } from "./main.js";
+// highlightClue is injected by the host/guest module so this file
+// doesn't need to know which page it's running on.
+let _highlightClue = () => {};
+export function setHighlightClue(fn) { _highlightClue = fn; }
 
 let rows = 15, cols = 15;
 export let cells = [];

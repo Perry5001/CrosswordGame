@@ -11,6 +11,7 @@ let conn = null;
 
 peer.on('open', (id) => {
     log("My Peer ID: " + id);
+    connect()
 });
 
 const receiverId = hostID;

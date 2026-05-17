@@ -18,13 +18,13 @@ def load_puzzle(filename):
 def serve_index():
   return send_from_directory('.', 'index.html')
 
-@app.route('/connector.html')
+@app.route('/guest')
 def serve_connector():
-  return send_from_directory('.', 'connector.html')
+  return send_from_directory('.', 'guest.html')
 
-@app.route('/receiver.html')
+@app.route('/host')
 def serve_receiver():
-  return send_from_directory('.', 'receiver.html')
+  return send_from_directory('.', 'host.html')
 
 @app.route('/call-crossword', methods=['POST'])
 def call_crossword():

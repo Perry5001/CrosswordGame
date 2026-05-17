@@ -1,5 +1,6 @@
 // Create peer with auto-generated ID
-const peer = new Peer('1234');
+const randomStr = Math.random().toString(36).slice(2, 8);
+const peer = new Peer(randomStr);
 
 peer.on('open', (id) => {
     console.log('Invite link: yoursite.com/join?id=' + id);
