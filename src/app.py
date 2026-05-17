@@ -1,5 +1,7 @@
 import puz
 import io
+import os
+import tempfile
 from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
  
@@ -29,26 +31,30 @@ def upload_puzzle():
     if not f.filename.endswith('.puz'):
         return jsonify({"error": "File must be a .puz file"}), 400
  
+    # puz.read() expects a real file path, not a file-like object.
+    # Write to a temp file, read it, then clean up.
+    tmp = tempfile.NamedTemporaryFile(suffix='.puz', delete=False)
     try:
-        data = f.read()
-        p = puz.read(io.BytesIO(data))
+        f.save(tmp.name)
+        tmp.close()
+        p = puz.read(tmp.name)
     except Exception as e:
         return jsonify({"error": f"Failed to parse puzzle: {str(e)}"}), 400
+    finally:
+        os.unlink(tmp.name)
  
-    # Build the grid object
+    numbering = p.clue_numbering()
+ 
     result = {
         "width":  p.width,
         "height": p.height,
         "fill":   p.fill,
         "title":  p.title,
         "author": p.author,
-    }
- 
-    # Build clues
-    numbering = p.clue_numbering()
-    result["clues"] = {
-        "across": numbering.across,
-        "down":   numbering.down,
+        "clues": {
+            "across": numbering.across,
+            "down":   numbering.down,
+        }
     }
  
     return jsonify(result)
