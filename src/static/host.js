@@ -1,3 +1,7 @@
+// filename is attached to the crossword object before sending so the guest
+// can request clues for the same puzzle from the shared server.
+import { buildGrid, cellSize, highlightWord, onFocus, setHighlightClue } from "./crossword.js";
+
 const randomStr = Math.random().toString(36).slice(2, 8);
 const peer = new Peer(randomStr);
 
@@ -6,9 +10,6 @@ const API_BASE = window.location.hostname.includes("127.0.0.1")
     : "https://crosswordgame-272p.onrender.com";
 
 let filename = "./puzzles/CrossSampler 1 Easy.puz";
-// filename is attached to the crossword object before sending so the guest
-// can request clues for the same puzzle from the shared server.
-import { buildGrid, cellSize, highlightWord, onFocus, setHighlightClue } from "./crossword.js";
 
 let cluesObjects = [];
 let crossword;
@@ -16,7 +17,7 @@ let connections = []; // track all connected guests
 
 // ── Clue highlighting ────────────────────────────────────────────────────────
 
-export function highlightClue(r, c, clueNum = null, dir) {
+function highlightClue(r, c, clueNum = null, dir) {
     for (const clue of cluesObjects) clue.div.classList.remove("focused-clue");
     const selector = clueNum
         ? `.clue[data-num="${clueNum}"][data-dir="${dir}"]`

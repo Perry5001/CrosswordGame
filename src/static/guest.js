@@ -13,7 +13,7 @@ const log = (msg) => {
 
 let cluesObjects = [];
 
-export function highlightClue(r, c, clueNum = null, dir) {
+function highlightClue(r, c, clueNum = null, dir) {
     for (const clue of cluesObjects) clue.div.classList.remove("focused-clue");
     const selector = clueNum
         ? `.clue[data-num="${clueNum}"][data-dir="${dir}"]`
@@ -23,6 +23,8 @@ export function highlightClue(r, c, clueNum = null, dir) {
 }
 
 setHighlightClue(highlightClue);
+
+// ── Clue list builder ────────────────────────────────────────────────────────
 
 function buildClues(clues, crossword) {
     const acrossList = document.getElementById('acrossList');
