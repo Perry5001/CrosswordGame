@@ -9,15 +9,50 @@
     <script type="module" src="static/host.js" defer></script>
 </head>
 <body>
-    <div class="header">
-        <h1>Crossword Host</h1>
-        <div style="display:flex; align-items:center; gap:12px;">
-            <input type="file" id="fileInput" accept=".puz">
-            <span id="upload-status" style="font-size:0.9em; color:#666;"></span>
-        </div>
-        <div id="peer-id" style="margin-top:8px;"></div>
+
+<!-- ── LOBBY ─────────────────────────────────────────────────── -->
+<div id="lobby">
+    <div class="lobby-card">
+        <h1>🧩 Crossword</h1>
+
+        <section class="lobby-section">
+            <label>Your name</label>
+            <div class="row">
+                <input type="text" id="hostUsername" placeholder="Enter your name" maxlength="20">
+                <button id="setUsernameBtn">Set</button>
+            </div>
+            <span id="usernameStatus" class="status-text"></span>
+        </section>
+
+        <section class="lobby-section">
+            <label>Upload puzzle</label>
+            <div class="row">
+                <input type="file" id="fileInput" accept=".puz">
+            </div>
+            <span id="upload-status" class="status-text"></span>
+        </section>
+
+        <section class="lobby-section">
+            <label>Invite link</label>
+            <div id="peer-id" class="status-text">Connecting…</div>
+        </section>
+
+        <section class="lobby-section">
+            <label>Players <span id="player-count">(0)</span></label>
+            <ul id="player-list"></ul>
+        </section>
+
+        <button id="startBtn" disabled>Start Game</button>
     </div>
- 
+</div>
+
+<!-- ── GAME ──────────────────────────────────────────────────── -->
+<div id="game" style="display:none;">
+    <div class="header">
+        <h1 id="puzzle-title">Crossword</h1>
+        <div id="game-peer-id" style="font-size:0.8em;"></div>
+    </div>
+
     <div class="grid-wrap">
         <div class="grid" id="grid"></div>
         <div class="clues">
@@ -31,8 +66,9 @@
             </div>
         </div>
     </div>
- 
-    <div id="hint">Upload a .puz file to begin. Share the link with your partner.</div>
+
+    <div id="hint">Click a white square to start typing. Arrow keys to navigate.</div>
+</div>
+
 </body>
 </html>
- 

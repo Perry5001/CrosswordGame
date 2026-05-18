@@ -1,30 +1,65 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Crossword Guest</title>
     <link rel="stylesheet" href="static/styles.css">
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <script type="module" src="static/guest.js" defer></script>
 </head>
-    <body>
-    <div class ="header">
-        <h1>Crossword Grid</h1>
-        <p id="log"></p>
+<body>
+
+<!-- ── LOBBY ─────────────────────────────────────────────────── -->
+<div id="lobby">
+    <div class="lobby-card">
+        <h1>🧩 Crossword</h1>
+
+        <section class="lobby-section">
+            <label>Your name</label>
+            <div class="row">
+                <input type="text" id="guestUsername" placeholder="Enter your name" maxlength="20">
+                <button id="setUsernameBtn">Set</button>
+            </div>
+            <span id="usernameStatus" class="status-text"></span>
+        </section>
+
+        <section class="lobby-section">
+            <label>Status</label>
+            <div id="log" class="status-text">Connecting…</div>
+        </section>
+
+        <section class="lobby-section">
+            <label>Players</label>
+            <ul id="player-list"></ul>
+        </section>
+
+        <p class="waiting-text">Waiting for host to start the game…</p>
+    </div>
+</div>
+
+<!-- ── GAME ──────────────────────────────────────────────────── -->
+<div id="game" style="display:none;">
+    <div class="header">
+        <h1 id="puzzle-title">Crossword</h1>
     </div>
 
     <div class="grid-wrap">
         <div class="grid" id="grid"></div>
-            <div class="clues">
-                <div class="across">
-                    <h2>Across</h2>
-                    <ol id="acrossList"></ol>
-                </div>
-                    <div class="down">
-                    <h2>Down</h2>
+        <div class="clues">
+            <div class="across">
+                <h2>Across</h2>
+                <ol id="acrossList"></ol>
+            </div>
+            <div class="down">
+                <h2>Down</h2>
                 <ol id="downList"></ol>
             </div>
         </div>
     </div>
-    <div id="hint">Click a white square to start typing. Arrow keys to navigate</div>
+
+    <div id="hint">Click a white square to start typing. Arrow keys to navigate.</div>
+</div>
+
 </body>
 </html>

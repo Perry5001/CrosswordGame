@@ -1,14 +1,16 @@
 import { buildGrid, cellSize, onFocus, setHighlightClue, setOnCellChange, applyRemoteCell } from "./crossword.js";
 
+// ── State ─────────────────────────────────────────────────────────────────────
+let cluesObjects  = [];
+let guestUsername = "Guest";
+let conn          = null;
+
 const log = (msg) => {
     const el = document.getElementById("log");
-    if (el) el.textContent += msg + "\n";
+    if (el) el.textContent = msg;   // replace rather than append — cleaner for status
 };
 
-// ── Clue highlighting ────────────────────────────────────────────────────────
-
-let cluesObjects = [];
-
+// ── Clue highlighting ─────────────────────────────────────────────────────────
 function highlightClue(r, c, clueNum = null, dir) {
     for (const clue of cluesObjects) clue.div.classList.remove("focused-clue");
     const selector = clueNum
@@ -17,26 +19,58 @@ function highlightClue(r, c, clueNum = null, dir) {
     const clue = document.querySelector(selector);
     if (clue) clue.classList.add("focused-clue");
 }
-
 setHighlightClue(highlightClue);
 
-// When the guest types, send to host
+// When guest types, send to host
 setOnCellChange((r, c, value) => {
     if (conn && conn.open) conn.send({ type: "cell", r, c, value });
 });
 
-// ── Render (everything comes from the host over P2P) ─────────────────────────
+// ── Username ──────────────────────────────────────────────────────────────────
+document.getElementById('setUsernameBtn').addEventListener('click', () => {
+    const val = document.getElementById('guestUsername').value.trim();
+    if (!val) return;
+    guestUsername = val;
+    document.getElementById('usernameStatus').textContent = `Name set to "${guestUsername}"`;
+    // Tell host about the name change
+    if (conn && conn.open) conn.send({ type: "username", username: guestUsername });
+});
+
+document.getElementById('guestUsername').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') document.getElementById('setUsernameBtn').click();
+});
+
+// ── Player list ───────────────────────────────────────────────────────────────
+function renderPlayerList(players) {
+    const ul = document.getElementById('player-list');
+    ul.innerHTML = '';
+    for (const p of players) {
+        const li = document.createElement('li');
+        li.textContent = p.isHost
+            ? `${p.username} (host)`
+            : p.username === guestUsername
+                ? `${p.username} (you)`
+                : p.username;
+        ul.appendChild(li);
+    }
+}
+
+// ── Game screen ───────────────────────────────────────────────────────────────
+function showGame(crossword) {
+    document.getElementById('lobby').style.display = 'none';
+    document.getElementById('game').style.display  = 'block';
+    document.getElementById('puzzle-title').textContent = crossword.title || "Crossword";
+    renderPuzzle(crossword);
+}
 
 function renderPuzzle(cw) {
     buildGrid(cw.width, cw.height, cw.fill);
-
     const acrosslist = document.getElementById('acrossList');
     const downlist   = document.getElementById('downList');
-    acrosslist.style.height = cellSize * cw.height - 28 + 'px';
+    acrosslist.style.height   = cellSize * cw.height - 28 + 'px';
     acrosslist.style.overflowY = 'auto';
-    downlist.style.height   = cellSize * cw.height - 28 + 'px';
-    downlist.style.overflowY = 'auto';
-
+    downlist.style.height     = cellSize * cw.height - 28 + 'px';
+    downlist.style.overflowY  = 'auto';
     buildClues(cw.clues);
 }
 
@@ -51,10 +85,8 @@ function buildClues(clues) {
         const li = document.createElement('li');
         li.textContent = `${clue.num}. ${clue.clue}`;
         li.classList.add("clue");
-        li.dataset.r   = clue.row;
-        li.dataset.c   = clue.col;
-        li.dataset.num = clue.num;
-        li.dataset.dir = "across";
+        li.dataset.r = clue.row; li.dataset.c = clue.col;
+        li.dataset.num = clue.num; li.dataset.dir = "across";
         cluesObjects.push({ div: li });
         li.addEventListener('click', () => clueOnClick(clue.row, clue.col, "across"));
         acrossList.appendChild(li);
@@ -63,10 +95,8 @@ function buildClues(clues) {
         const li = document.createElement('li');
         li.textContent = `${clue.num}. ${clue.clue}`;
         li.classList.add("clue");
-        li.dataset.r   = clue.row;
-        li.dataset.c   = clue.col;
-        li.dataset.num = clue.num;
-        li.dataset.dir = "down";
+        li.dataset.r = clue.row; li.dataset.c = clue.col;
+        li.dataset.num = clue.num; li.dataset.dir = "down";
         cluesObjects.push({ div: li });
         li.addEventListener('click', () => clueOnClick(clue.row, clue.col, "down"));
         downList.appendChild(li);
@@ -79,10 +109,9 @@ function clueOnClick(r, c, dir) {
     onFocus(r, c, dir);
 }
 
-// ── PeerJS ───────────────────────────────────────────────────────────────────
-
+// ── PeerJS ────────────────────────────────────────────────────────────────────
 const urlParams = new URLSearchParams(window.location.search);
-const hostID = urlParams.get('id');
+const hostID    = urlParams.get('id');
 
 const peer = new Peer(undefined, {
     config: {
@@ -100,13 +129,11 @@ peer.on('error', (err) => {
     console.error(err);
 });
 
-let conn = null;
-
 peer.on('open', () => {
     if (hostID) {
         connect();
     } else {
-        log("⚠️ No host ID in URL. Use a link like /guest?id=HOSTID");
+        log("⚠️ No host ID in URL.");
     }
 });
 
@@ -115,17 +142,22 @@ function connect() {
     log("Connecting to host…");
     conn = peer.connect(hostID);
 
-    conn.on('open', () => log("✅ Connected — waiting for puzzle…"));
+    conn.on('open', () => {
+        log("✅ Connected — waiting for host to start…");
+        // Announce username immediately
+        conn.send({ type: "join", username: guestUsername });
+    });
 
     conn.on('data', (data) => {
-        if (data?.type === "init" && data.crossword) {
-            log(`📩 Received: ${data.crossword.title || "puzzle"}`);
-            renderPuzzle(data.crossword);
+        if (data?.type === "start" && data.crossword) {
+            showGame(data.crossword);
+        } else if (data?.type === "player-list") {
+            renderPlayerList(data.players);
         } else if (data?.type === "cell") {
             applyRemoteCell(data.r, data.c, data.value);
         }
     });
 
-    conn.on('close', () => { log("❌ Disconnected"); conn = null; });
+    conn.on('close', () => { log("❌ Disconnected from host"); conn = null; });
     conn.on('error', (err) => log(`⚠️ ${err}`));
 }

@@ -4,12 +4,14 @@ const API_BASE = window.location.hostname.includes("127.0.0.1")
     ? "http://127.0.0.1:5000"
     : "https://crosswordgame-272p.onrender.com";
 
+// ── State ─────────────────────────────────────────────────────────────────────
 let cluesObjects = [];
-let crossword = null;   // holds grid + clues once a puzzle is uploaded
-let connections = [];
+let crossword    = null;
+let connections  = [];          // { conn, peerId, username }
+let hostUsername = "Host";
+let gameStarted  = false;
 
-// ── Clue highlighting ────────────────────────────────────────────────────────
-
+// ── Clue highlighting ─────────────────────────────────────────────────────────
 function highlightClue(r, c, clueNum = null, dir) {
     for (const clue of cluesObjects) clue.div.classList.remove("focused-clue");
     const selector = clueNum
@@ -18,18 +20,14 @@ function highlightClue(r, c, clueNum = null, dir) {
     const clue = document.querySelector(selector);
     if (clue) clue.classList.add("focused-clue");
 }
-
 setHighlightClue(highlightClue);
 
-// When the host types, broadcast to all connected guests
+// When host types, broadcast to all guests
 setOnCellChange((r, c, value) => {
-    for (const conn of connections) {
-        if (conn.open) conn.send({ type: "cell", r, c, value });
-    }
+    broadcast({ type: "cell", r, c, value });
 });
 
-// ── PeerJS ───────────────────────────────────────────────────────────────────
-
+// ── PeerJS ────────────────────────────────────────────────────────────────────
 const peer = new Peer(Math.random().toString(36).slice(2, 8), {
     config: {
         iceServers: [
@@ -43,55 +41,112 @@ const peer = new Peer(Math.random().toString(36).slice(2, 8), {
 
 peer.on('error', (err) => {
     console.error("PeerJS error:", err.type, err);
-    const el = document.getElementById('peer-id');
-    if (err.type === 'unavailable-id') {
-        el.textContent = "ID conflict — please refresh.";
-    } else {
-        el.textContent = `⚠️ PeerJS error: ${err.type}`;
-    }
+    document.getElementById('peer-id').textContent = `⚠️ PeerJS error: ${err.type}`;
 });
 
 peer.on('open', (id) => {
     const guestURL = `${window.location.origin}/guest?id=${id}`;
     document.getElementById('peer-id').innerHTML =
-        `Share with your partner: <a href="${guestURL}">${guestURL}</a>`;
+        `Invite link: <a href="${guestURL}" target="_blank">${guestURL}</a>`;
+    document.getElementById('game-peer-id').innerHTML =
+        `Invite link: <a href="${guestURL}" target="_blank">${guestURL}</a>`;
 });
 
 peer.on('connection', (conn) => {
-    console.log("Guest connected:", conn.peer);
-    connections.push(conn);
+    const entry = { conn, peerId: conn.peer, username: "Guest" };
+    connections.push(entry);
 
     conn.on('open', () => {
-        // Send puzzle immediately if already loaded, otherwise wait
-        if (crossword) {
-            conn.send({ type: "init", crossword });
-        } else {
-            const wait = setInterval(() => {
-                if (crossword) {
-                    conn.send({ type: "init", crossword });
-                    clearInterval(wait);
-                }
-            }, 200);
+        // If game already started send them the current state
+        if (gameStarted && crossword) {
+            conn.send({ type: "start", crossword });
         }
+        // Always send current player list
+        broadcastPlayerList();
     });
 
     conn.on('data', (data) => {
-        if (data?.type === "cell") {
-            // Apply to host's own grid
+        if (data?.type === "join") {
+            entry.username = data.username || "Guest";
+            broadcastPlayerList();
+        } else if (data?.type === "username") {
+            entry.username = data.username || entry.username;
+            broadcastPlayerList();
+        } else if (data?.type === "cell") {
             applyRemoteCell(data.r, data.c, data.value);
-            // Broadcast to all other guests
+            // Relay to all other guests
             for (const other of connections) {
-                if (other !== conn && other.open) {
-                    other.send({ type: "cell", r: data.r, c: data.c, value: data.value });
+                if (other !== entry && other.conn.open) {
+                    other.conn.send({ type: "cell", r: data.r, c: data.c, value: data.value });
                 }
             }
         }
     });
-    conn.on('close', () => { connections = connections.filter(c => c !== conn); });
+
+    conn.on('close', () => {
+        connections = connections.filter(e => e !== entry);
+        broadcastPlayerList();
+    });
 });
 
-// ── Puzzle upload ─────────────────────────────────────────────────────────────
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function broadcast(msg) {
+    for (const entry of connections) {
+        if (entry.conn.open) entry.conn.send(msg);
+    }
+}
 
+function broadcastPlayerList() {
+    const players = [
+        { username: hostUsername, isHost: true },
+        ...connections.map(e => ({ username: e.username, isHost: false }))
+    ];
+    renderPlayerList(players);
+    broadcast({ type: "player-list", players });
+    // Enable start only if puzzle is loaded
+    document.getElementById('startBtn').disabled = !crossword;
+}
+
+function renderPlayerList(players) {
+    const ul = document.getElementById('player-list');
+    ul.innerHTML = '';
+    document.getElementById('player-count').textContent = `(${players.length})`;
+    for (const p of players) {
+        const li = document.createElement('li');
+        li.textContent = p.isHost ? `${p.username} (you, host)` : p.username;
+        ul.appendChild(li);
+    }
+}
+
+// ── Username ──────────────────────────────────────────────────────────────────
+document.getElementById('setUsernameBtn').addEventListener('click', () => {
+    const val = document.getElementById('hostUsername').value.trim();
+    if (!val) return;
+    hostUsername = val;
+    document.getElementById('usernameStatus').textContent = `Name set to "${hostUsername}"`;
+    broadcastPlayerList();
+});
+
+document.getElementById('hostUsername').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') document.getElementById('setUsernameBtn').click();
+});
+
+// ── Start button ──────────────────────────────────────────────────────────────
+document.getElementById('startBtn').addEventListener('click', () => {
+    if (!crossword) return;
+    gameStarted = true;
+    broadcast({ type: "start", crossword });
+    showGame();
+});
+
+function showGame() {
+    document.getElementById('lobby').style.display = 'none';
+    document.getElementById('game').style.display  = 'block';
+    document.getElementById('puzzle-title').textContent = crossword.title || "Crossword";
+    renderPuzzle(crossword);
+}
+
+// ── Puzzle upload ─────────────────────────────────────────────────────────────
 document.getElementById('fileInput').addEventListener('change', (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -99,17 +154,11 @@ document.getElementById('fileInput').addEventListener('change', (e) => {
     const status = document.getElementById('upload-status');
     status.textContent = "Parsing puzzle…";
 
-    // Read the file as raw bytes, then base64 encode before sending.
-    // This guarantees the server receives identical bytes regardless of
-    // platform newline handling or multipart encoding quirks.
     const reader = new FileReader();
     reader.onload = () => {
-        // reader.result is an ArrayBuffer — convert to base64 string
         const bytes = new Uint8Array(reader.result);
         let binary = '';
-        for (let i = 0; i < bytes.length; i++) {
-            binary += String.fromCharCode(bytes[i]);
-        }
+        for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
         const base64 = btoa(binary);
 
         fetch(`${API_BASE}/upload-puzzle`, {
@@ -119,17 +168,11 @@ document.getElementById('fileInput').addEventListener('change', (e) => {
         })
         .then(r => r.json())
         .then(data => {
-            if (data.error) {
-                status.textContent = `Error: ${data.error}`;
-                return;
-            }
+            if (data.error) { status.textContent = `Error: ${data.error}`; return; }
             crossword = data;
-            status.textContent = `Loaded: ${crossword.title || file.name}`;
-            renderPuzzle(crossword);
-            // Push to any guests already connected
-            for (const conn of connections) {
-                if (conn.open) conn.send({ type: "init", crossword });
-            }
+            status.textContent = `✅ Loaded: ${crossword.title || file.name}`;
+            // Enable start now that we have a puzzle
+            document.getElementById('startBtn').disabled = false;
         })
         .catch(err => {
             status.textContent = "Upload failed — is the server running?";
@@ -139,18 +182,15 @@ document.getElementById('fileInput').addEventListener('change', (e) => {
     reader.readAsArrayBuffer(file);
 });
 
-// ── Render ───────────────────────────────────────────────────────────────────
-
+// ── Render ────────────────────────────────────────────────────────────────────
 function renderPuzzle(cw) {
     buildGrid(cw.width, cw.height, cw.fill);
-
     const acrosslist = document.getElementById('acrossList');
     const downlist   = document.getElementById('downList');
-    acrosslist.style.height = cellSize * cw.height - 28 + 'px';
+    acrosslist.style.height  = cellSize * cw.height - 28 + 'px';
     acrosslist.style.overflowY = 'auto';
-    downlist.style.height   = cellSize * cw.height - 28 + 'px';
+    downlist.style.height    = cellSize * cw.height - 28 + 'px';
     downlist.style.overflowY = 'auto';
-
     buildClues(cw.clues);
 }
 
@@ -165,10 +205,8 @@ function buildClues(clues) {
         const li = document.createElement('li');
         li.textContent = `${clue.num}. ${clue.clue}`;
         li.classList.add("clue");
-        li.dataset.r   = clue.row;
-        li.dataset.c   = clue.col;
-        li.dataset.num = clue.num;
-        li.dataset.dir = "across";
+        li.dataset.r = clue.row; li.dataset.c = clue.col;
+        li.dataset.num = clue.num; li.dataset.dir = "across";
         cluesObjects.push({ div: li });
         li.addEventListener('click', () => clueOnClick(clue.row, clue.col, "across"));
         acrossList.appendChild(li);
@@ -177,10 +215,8 @@ function buildClues(clues) {
         const li = document.createElement('li');
         li.textContent = `${clue.num}. ${clue.clue}`;
         li.classList.add("clue");
-        li.dataset.r   = clue.row;
-        li.dataset.c   = clue.col;
-        li.dataset.num = clue.num;
-        li.dataset.dir = "down";
+        li.dataset.r = clue.row; li.dataset.c = clue.col;
+        li.dataset.num = clue.num; li.dataset.dir = "down";
         cluesObjects.push({ div: li });
         li.addEventListener('click', () => clueOnClick(clue.row, clue.col, "down"));
         downList.appendChild(li);
@@ -192,3 +228,6 @@ function clueOnClick(r, c, dir) {
     document.querySelector(`[data-r="${r}"][data-c="${c}"]`).querySelector('input').focus();
     onFocus(r, c, dir);
 }
+
+// Init player list with just the host
+renderPlayerList([{ username: hostUsername, isHost: true }]);
