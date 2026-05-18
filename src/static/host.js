@@ -165,7 +165,7 @@ function renderScoreboard() {
     document.getElementById('scoreboard').append(item);
 
     //Add other connections
-    for (connection in connections){
+    for (const connection of connections){
         const {conn, peerId, username} = connection;
         let item = document.createElement("ul");
         item.classList += "user"
