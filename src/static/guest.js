@@ -7,7 +7,7 @@ let conn          = null;
 
 const log = (msg) => {
     const el = document.getElementById("log");
-    if (el) el.textContent = msg;   // replace rather than append — cleaner for status
+    if (el) el.textContent = msg;
 };
 
 // ── Clue highlighting ─────────────────────────────────────────────────────────
@@ -32,7 +32,6 @@ document.getElementById('setUsernameBtn').addEventListener('click', () => {
     if (!val) return;
     guestUsername = val;
     document.getElementById('usernameStatus').textContent = `Name set to "${guestUsername}"`;
-    // Tell host about the name change
     if (conn && conn.open) conn.send({ type: "username", username: guestUsername });
 });
 
@@ -55,6 +54,20 @@ function renderPlayerList(players) {
     }
 }
 
+// ── Scoreboard ────────────────────────────────────────────────────────────────
+// Receives plain data from host: [{ peerId, username, score }, ...]
+function renderScoreboard(scoreData) {
+    const el = document.getElementById('scoreboard');
+    if (!el) return;
+    el.innerHTML = '';
+    for (const s of scoreData) {
+        const li = document.createElement('li');
+        li.textContent = `${s.username}: ${s.score}`;
+        li.dataset.peerId = s.peerId;
+        el.appendChild(li);
+    }
+}
+
 // ── Game screen ───────────────────────────────────────────────────────────────
 function showGame(crossword) {
     document.getElementById('lobby').style.display = 'none';
@@ -67,10 +80,10 @@ function renderPuzzle(cw) {
     buildGrid(cw.width, cw.height, cw.fill);
     const acrosslist = document.getElementById('acrossList');
     const downlist   = document.getElementById('downList');
-    acrosslist.style.height   = cellSize * cw.height - 28 + 'px';
+    acrosslist.style.height    = cellSize * cw.height - 28 + 'px';
     acrosslist.style.overflowY = 'auto';
-    downlist.style.height     = cellSize * cw.height - 28 + 'px';
-    downlist.style.overflowY  = 'auto';
+    downlist.style.height      = cellSize * cw.height - 28 + 'px';
+    downlist.style.overflowY   = 'auto';
     buildClues(cw.clues);
 }
 
@@ -109,17 +122,6 @@ function clueOnClick(r, c, dir) {
     onFocus(r, c, dir);
 }
 
-// ── Scoreboard ─────────────────────────────────────────────────────────────
-
-function renderScoreboard(scores) {
-
-    scoreboard = document.getElementById('scoreboard');
-
-    for(const item of scores){
-        scoreboard.append(scores[0])
-    }
-}
-
 // ── PeerJS ────────────────────────────────────────────────────────────────────
 const urlParams = new URLSearchParams(window.location.search);
 const hostID    = urlParams.get('id');
@@ -141,11 +143,8 @@ peer.on('error', (err) => {
 });
 
 peer.on('open', () => {
-    if (hostID) {
-        connect();
-    } else {
-        log("⚠️ No host ID in URL.");
-    }
+    if (hostID) connect();
+    else log("⚠️ No host ID in URL.");
 });
 
 function connect() {
@@ -155,7 +154,6 @@ function connect() {
 
     conn.on('open', () => {
         log("✅ Connected — waiting for host to start…");
-        // Announce username immediately
         conn.send({ type: "join", username: guestUsername });
     });
 

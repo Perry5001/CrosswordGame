@@ -1,4 +1,4 @@
-import { buildGrid, cellSize, onFocus, setHighlightClue, setOnCellChange, applyRemoteCell } from "./crossword.js";
+import { buildGrid, cellSize, onFocus, setHighlightClue, setOnCellChange, applyRemoteCell, cells } from "./crossword.js";
 
 const API_BASE = window.location.hostname.includes("127.0.0.1")
     ? "http://127.0.0.1:5000"
@@ -7,10 +7,17 @@ const API_BASE = window.location.hostname.includes("127.0.0.1")
 // ── State ─────────────────────────────────────────────────────────────────────
 let cluesObjects = [];
 let crossword    = null;
-let connections  = [];          // { conn, peerId, username }
+let connections  = [];   // { conn, peerId, username }
 let hostUsername = "Host";
 let gameStarted  = false;
+
+// scores: plain data only — { [peerId]: { username, score } }
+// "host" is used as the peerId for the host themselves
 let scores = {};
+
+// correctCells: tracks which cells each player currently has correct
+// { [peerId]: Set of "r,c" strings }
+let correctCells = {};
 
 // ── Clue highlighting ─────────────────────────────────────────────────────────
 function highlightClue(r, c, clueNum = null, dir) {
@@ -23,9 +30,11 @@ function highlightClue(r, c, clueNum = null, dir) {
 }
 setHighlightClue(highlightClue);
 
-// When host types, broadcast to all guests
+// When host types, recalculate host score then broadcast cell + scoreboard
 setOnCellChange((r, c, value) => {
     broadcast({ type: "cell", r, c, value });
+    console.log("cellChange")
+    recalculateScore("host", r, c, value);
 });
 
 // ── PeerJS ────────────────────────────────────────────────────────────────────
@@ -58,23 +67,33 @@ peer.on('connection', (conn) => {
     connections.push(entry);
 
     conn.on('open', () => {
-        // If game already started send them the current state
         if (gameStarted && crossword) {
             conn.send({ type: "start", crossword });
-            updateScoreboard(conn.peer, entry.username, "0");
+            // Add to scoreboard when joining mid-game
+            scores[entry.peerId] = { username: entry.username, score: 0 };
+            correctCells[entry.peerId] = new Set();
+            renderScoreboard();
+            broadcastScoreboard();
         }
-        // Always send current player list
         broadcastPlayerList();
     });
 
     conn.on('data', (data) => {
         if (data?.type === "join") {
             entry.username = data.username || "Guest";
+            renderScoreboard();
             broadcastPlayerList();
+
         } else if (data?.type === "username") {
             entry.username = data.username || entry.username;
+            // Update name in scores if game already running
+            if (scores[entry.peerId]) {
+                scores[entry.peerId].username = entry.username;
+                renderScoreboard();
+                broadcastScoreboard();
+            }
             broadcastPlayerList();
-            updateScoreboard(conn.peer, entry.username, "0");
+
         } else if (data?.type === "cell") {
             applyRemoteCell(data.r, data.c, data.value);
             // Relay to all other guests
@@ -83,12 +102,17 @@ peer.on('connection', (conn) => {
                     other.conn.send({ type: "cell", r: data.r, c: data.c, value: data.value });
                 }
             }
+            // Recalculate this guest's score
+            recalculateScore(entry.peerId, data.r, data.c, data.value);
         }
     });
 
     conn.on('close', () => {
         connections = connections.filter(e => e !== entry);
+        delete scores[entry.peerId];
+        delete correctCells[entry.peerId];
         broadcastPlayerList();
+        broadcastScoreboard();
     });
 });
 
@@ -106,7 +130,6 @@ function broadcastPlayerList() {
     ];
     renderPlayerList(players);
     broadcast({ type: "player-list", players });
-    // Enable start only if puzzle is loaded
     document.getElementById('startBtn').disabled = !crossword;
 }
 
@@ -121,13 +144,86 @@ function renderPlayerList(players) {
     }
 }
 
+// ── Scoreboard ────────────────────────────────────────────────────────────────
+
+// Count how many cells in the grid have the correct letter.
+// crossword.solution holds the answer string; cells[][] holds current inputs.
+// We attribute every filled cell to a single player for simplicity — this
+// function counts ALL correct cells for that peerId by reading the shared grid.
+// For proper per-player attribution you'd track who typed each cell separately.
+function recalculateScore(peerId, row, col, value) {
+    if (!crossword?.solution || !gameStarted) return;
+    if (!scores[peerId]) return;
+
+    const sol = crossword.solution;
+    const idx = row * crossword.width + col;
+    if (sol[idx] === '.') return;   // black cell, ignore
+
+    const key = `${row},${col}`;
+    const wasCorrect = correctCells[peerId]?.has(key) ?? false;
+    const isCorrect  = value !== '' && value === sol[idx];
+
+    if (isCorrect && !wasCorrect) {
+        // Newly correct — give a point
+        scores[peerId].score++;
+        correctCells[peerId].add(key);
+    } else if (!isCorrect && wasCorrect) {
+        // Was correct, now wrong or cleared — take a point back
+        scores[peerId].score--;
+        correctCells[peerId].delete(key);
+    }
+    // If neither condition, score doesn't change (wrong→wrong, empty→empty)
+
+    renderScoreboard();
+    broadcastScoreboard();
+}
+
+function broadcastScoreboard() {
+    // Send plain serialisable data — no DOM elements
+    const scoreData = Object.entries(scores).map(([peerId, s]) => ({
+        peerId,
+        username: s.username,
+        score: s.score
+    }));
+    broadcast({ type: "scoreboard", scores: scoreData });
+}
+
+function renderScoreboard() {
+    const el = document.getElementById('scoreboard');
+    if (!el) return;
+    el.innerHTML = '';
+    for (const [peerId, s] of Object.entries(scores)) {
+        const li = document.createElement('li');
+        li.textContent = `${s.username}: ${s.score}`;
+        li.dataset.peerId = peerId;
+        el.appendChild(li);
+    }
+}
+
+function initScoreboard() {
+    scores = {};
+    correctCells = {};
+    // Add host
+    scores["host"] = { username: hostUsername, score: 0 };
+    correctCells["host"] = new Set();
+    // Add all connected guests
+    for (const entry of connections) {
+        scores[entry.peerId] = { username: entry.username, score: 0 };
+        correctCells[entry.peerId] = new Set();
+    }
+    renderScoreboard();
+    broadcastScoreboard();
+}
+
 // ── Username ──────────────────────────────────────────────────────────────────
 document.getElementById('setUsernameBtn').addEventListener('click', () => {
     const val = document.getElementById('hostUsername').value.trim();
     if (!val) return;
     hostUsername = val;
     document.getElementById('usernameStatus').textContent = `Name set to "${hostUsername}"`;
+    if (scores["host"]) scores["host"].username = hostUsername;
     broadcastPlayerList();
+    broadcastScoreboard();
 });
 
 document.getElementById('hostUsername').addEventListener('keydown', (e) => {
@@ -146,61 +242,8 @@ function showGame() {
     document.getElementById('lobby').style.display = 'none';
     document.getElementById('game').style.display  = 'block';
     document.getElementById('puzzle-title').textContent = crossword.title || "Crossword";
-    renderScoreboard();
+    initScoreboard();
     renderPuzzle(crossword);
-}
-
-// ── Scoreboard ─────────────────────────────────────────────────────────────
-
-function renderScoreboard() {
-    //Add host
-    let item = document.createElement("ul");
-    item.classList += "user"
-    item.innerHTML = `${hostUsername}: `;
-    let score = document.createElement("p");
-    score.innerHTML = "0"
-    item.append(score);
-    item.dataset.peerid = "host"
-    scores["host"] = [item, score]
-    document.getElementById('scoreboard').append(item);
-
-    //Add other connections
-    for (const connection of connections){
-        const {conn, peerId, username} = connection;
-        let item = document.createElement("ul");
-        item.classList += "user"
-        item.innerHTML = `${username}: `;
-        let score = document.createElement("p");
-        score.innerHTML = "0";
-        item.append(score);
-        item.dataset.peerid = peerId;
-        scores[peerId] = [item, score];
-        document.getElementById('scoreboard').append(item);
-    }
-
-    broadcast({ type: "scoreboard", scores});
-}
-
-function updateScoreboard(peerId, username=null, score=null){
-    if(Object.hasOwn(scores,peerID) && username){
-        let user = scores[peerID];
-        user[0].innerHTML = `${username}: `;
-    }
-    if(Object.hasOwn(scores,peerID) && score){
-        let user = scores[peerID];
-        user[1].innerHTML = score;
-    }else{
-        let item = document.createElement("ul");
-        item.classList += "user"
-        item.innerHTML = `${username ? username : "Guest"}: `;
-        let score = document.createElement("p")
-        score.innerHTML = score ? score: "0";
-        item.append(score);
-        item.dataset.peerid = peerId
-        scores[peerId] = [item, score]
-        document.getElementById('scoreboard').append(item);
-    }
-    broadcast({ type: "scoreboard", scores});
 }
 
 // ── Puzzle upload ─────────────────────────────────────────────────────────────
@@ -228,7 +271,6 @@ document.getElementById('fileInput').addEventListener('change', (e) => {
             if (data.error) { status.textContent = `Error: ${data.error}`; return; }
             crossword = data;
             status.textContent = `✅ Loaded: ${crossword.title || file.name}`;
-            // Enable start now that we have a puzzle
             document.getElementById('startBtn').disabled = false;
         })
         .catch(err => {
@@ -244,10 +286,10 @@ function renderPuzzle(cw) {
     buildGrid(cw.width, cw.height, cw.fill);
     const acrosslist = document.getElementById('acrossList');
     const downlist   = document.getElementById('downList');
-    acrosslist.style.height  = cellSize * cw.height - 28 + 'px';
+    acrosslist.style.height   = cellSize * cw.height - 28 + 'px';
     acrosslist.style.overflowY = 'auto';
-    downlist.style.height    = cellSize * cw.height - 28 + 'px';
-    downlist.style.overflowY = 'auto';
+    downlist.style.height     = cellSize * cw.height - 28 + 'px';
+    downlist.style.overflowY  = 'auto';
     buildClues(cw.clues);
 }
 
