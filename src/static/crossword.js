@@ -14,6 +14,100 @@ export function applyRemoteCell(r, c, value) {
     }
 }
 
+// Fired whenever local focus moves — host/guest use this to broadcast position
+let _onPositionChange = () => {};
+export function setOnPositionChange(fn) { _onPositionChange = fn; }
+
+// remoteCursors: { [peerId]: { r, c, color, labelEl } }
+const remoteCursors = {};
+
+// Deterministic color from a peerId string
+function peerColor(peerId) {
+    let hash = 0;
+    for (let i = 0; i < peerId.length; i++) hash = peerId.charCodeAt(i) + ((hash << 5) - hash);
+    const hue = Math.abs(hash) % 360;
+    return `hsl(${hue}, 70%, 55%)`;
+}
+
+// Draw or move a remote cursor — highlights focused cell + word in peer's color
+export function applyRemoteCursor(peerId, username, r, c, dir) {
+    const color      = remoteCursors[peerId]?.color ?? peerColor(peerId);
+    const focusColor = color;
+    // Word highlight: same hue, more transparent
+    const wordColor  = color.replace('hsl(', 'hsla(').replace(')', ', 0.25)');
+
+    // Clear previous highlights for this peer
+    clearRemoteCursor(peerId);
+
+    if (r === -1 || !cells[r]?.[c]) {
+        delete remoteCursors[peerId];
+        return;
+    }
+
+    // Track which cells this peer is highlighting so we can clear them later
+    const highlighted = [];
+
+    // Focused cell
+    cells[r][c].div.style.setProperty(`--rc-${peerId}`, focusColor);
+    cells[r][c].div.classList.add(`rc-focused-${peerId}`);
+    highlighted.push({ r, c, type: 'focused' });
+
+    // Word cells
+    if (dir === 'across') {
+        let start = c;
+        while (start > 0 && !cells[r][start - 1].isBlack) start--;
+        let end = c;
+        while (end < cols - 1 && !cells[r][end + 1].isBlack) end++;
+        for (let cc = start; cc <= end; cc++) {
+            if (cc === c) continue;
+            cells[r][cc].div.classList.add(`rc-word-${peerId}`);
+            highlighted.push({ r, c: cc, type: 'word' });
+        }
+    } else {
+        let start = r;
+        while (start > 0 && !cells[start - 1][c].isBlack) start--;
+        let end = r;
+        while (end < rows - 1 && !cells[end + 1][c].isBlack) end++;
+        for (let rr = start; rr <= end; rr++) {
+            if (rr === r) continue;
+            cells[rr][c].div.classList.add(`rc-word-${peerId}`);
+            highlighted.push({ r: rr, c, type: 'word' });
+        }
+    }
+
+    // Inject per-peer CSS if not already present
+    const styleId = `rc-style-${peerId}`;
+    if (!document.getElementById(styleId)) {
+        const style = document.createElement('style');
+        style.id = styleId;
+        style.textContent = `
+            .rc-focused-${peerId} { background: ${focusColor} !important; }
+            .rc-word-${peerId}    { background: ${wordColor}  !important; }
+        `;
+        document.head.appendChild(style);
+    }
+
+    remoteCursors[peerId] = { r, c, dir, color, highlighted };
+}
+
+function clearRemoteCursor(peerId) {
+    const prev = remoteCursors[peerId];
+    if (!prev) return;
+    for (const { r, c, type } of prev.highlighted) {
+        if (cells[r]?.[c]) {
+            cells[r][c].div.classList.remove(`rc-focused-${peerId}`, `rc-word-${peerId}`);
+        }
+    }
+}
+
+// Remove a remote cursor entirely (player disconnected)
+export function removeRemoteCursor(peerId) {
+    clearRemoteCursor(peerId);
+    delete remoteCursors[peerId];
+    const style = document.getElementById(`rc-style-${peerId}`);
+    if (style) style.remove();
+}
+
 let rows = 15, cols = 15;
 export let cells = [];
 let focusedR = -1, focusedC = -1;
@@ -75,6 +169,7 @@ function onCellClick(e, r, c) {
             ? cells[r][c].div.dataset.acrossClue
             : cells[r][c].div.dataset.downClue;
         _highlightClue(r, c, clueNum, direction);
+        _onPositionChange(r, c, direction);  // direction changed, same cell
     }
 }
 
@@ -94,6 +189,7 @@ export function onFocus(r, c, dir = null) {
         ? cells[r][c].div.dataset.acrossClue
         : cells[r][c].div.dataset.downClue;
     _highlightClue(r, c, clueNum, direction);
+    _onPositionChange(r, c, direction);
 }
 
 export function highlightWord(r, c, dir) {

@@ -173,8 +173,12 @@ input[type="file"] {
 .cell.black:hover { background: #333; }
 .cell.white { cursor: text; }
 .cell.white:hover { background: #f0f0f0; }
-.cell.focused { background: #b5d4f4 !important; }
-.cell.word-highlight { background: #ddeeff; }
+.cell.focused { background: #b5d4f4 !important; z-index: 1; }
+.cell.word-highlight { background: #ddeeff !important; }
+
+/* Remote peer highlights are injected dynamically as rc-focused-{id} and
+   rc-word-{id}. Local .focused always wins because it is declared later
+   in the stylesheet and shares the same specificity + !important. */
 
 .cell-num {
     position: absolute;

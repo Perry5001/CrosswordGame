@@ -1,4 +1,4 @@
-import { buildGrid, cellSize, onFocus, setHighlightClue, setOnCellChange, applyRemoteCell, cells } from "./crossword.js";
+import { buildGrid, cellSize, onFocus, setHighlightClue, setOnCellChange, applyRemoteCell, cells, setOnPositionChange, applyRemoteCursor, removeRemoteCursor } from "./crossword.js";
 
 const API_BASE = window.location.hostname.includes("127.0.0.1")
     ? "http://127.0.0.1:5000"
@@ -33,8 +33,12 @@ setHighlightClue(highlightClue);
 // When host types, recalculate host score then broadcast cell + scoreboard
 setOnCellChange((r, c, value) => {
     broadcast({ type: "cell", r, c, value });
-    console.log("cellChange")
     recalculateScore("host", r, c, value);
+});
+
+// When host moves, broadcast position
+setOnPositionChange((r, c, dir) => {
+    broadcast({ type: "position", peerId: "host", username: hostUsername, r, c, dir });
 });
 
 // ── PeerJS ────────────────────────────────────────────────────────────────────
@@ -104,6 +108,16 @@ peer.on('connection', (conn) => {
             }
             // Recalculate this guest's score
             recalculateScore(entry.peerId, data.r, data.c, data.value);
+
+        } else if (data?.type === "position") {
+            // Show this guest's cursor on the host's grid
+            applyRemoteCursor(entry.peerId, entry.username, data.r, data.c, data.dir);
+            // Relay to all other guests so they see it too
+            for (const other of connections) {
+                if (other !== entry && other.conn.open) {
+                    other.conn.send({ type: "position", peerId: entry.peerId, username: entry.username, r: data.r, c: data.c, dir: data.dir });
+                }
+            }
         }
     });
 
@@ -111,6 +125,9 @@ peer.on('connection', (conn) => {
         connections = connections.filter(e => e !== entry);
         delete scores[entry.peerId];
         delete correctCells[entry.peerId];
+        removeRemoteCursor(entry.peerId);
+        // Tell guests to remove this cursor too
+        broadcast({ type: "position", peerId: entry.peerId, username: '', r: -1, c: -1 });
         broadcastPlayerList();
         broadcastScoreboard();
     });

@@ -1,4 +1,4 @@
-import { buildGrid, cellSize, onFocus, setHighlightClue, setOnCellChange, applyRemoteCell } from "./crossword.js";
+import { buildGrid, cellSize, onFocus, setHighlightClue, setOnCellChange, applyRemoteCell, setOnPositionChange, applyRemoteCursor, removeRemoteCursor } from "./crossword.js";
 
 // ── State ─────────────────────────────────────────────────────────────────────
 let cluesObjects  = [];
@@ -24,6 +24,11 @@ setHighlightClue(highlightClue);
 // When guest types, send to host
 setOnCellChange((r, c, value) => {
     if (conn && conn.open) conn.send({ type: "cell", r, c, value });
+});
+
+// When guest moves, send position to host
+setOnPositionChange((r, c, dir) => {
+    if (conn && conn.open) conn.send({ type: "position", r, c, dir });
 });
 
 // ── Username ──────────────────────────────────────────────────────────────────
@@ -166,6 +171,12 @@ function connect() {
             applyRemoteCell(data.r, data.c, data.value);
         } else if (data?.type === "scoreboard") {
             renderScoreboard(data.scores);
+        } else if (data?.type === "position") {
+            if (data.r === -1) {
+                removeRemoteCursor(data.peerId);
+            } else {
+                applyRemoteCursor(data.peerId, data.username, data.r, data.c, data.dir);
+            }
         }
     });
 
