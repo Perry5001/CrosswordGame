@@ -10,6 +10,7 @@ let crossword    = null;
 let connections  = [];          // { conn, peerId, username }
 let hostUsername = "Host";
 let gameStarted  = false;
+let scores = {};
 
 // ── Clue highlighting ─────────────────────────────────────────────────────────
 function highlightClue(r, c, clueNum = null, dir) {
@@ -55,6 +56,7 @@ peer.on('open', (id) => {
 peer.on('connection', (conn) => {
     const entry = { conn, peerId: conn.peer, username: "Guest" };
     connections.push(entry);
+    updateScoreboard(conn.peer, entry.username);
 
     conn.on('open', () => {
         // If game already started send them the current state
@@ -69,9 +71,11 @@ peer.on('connection', (conn) => {
         if (data?.type === "join") {
             entry.username = data.username || "Guest";
             broadcastPlayerList();
+            updateScoreboard(conn.peer, entry.username);
         } else if (data?.type === "username") {
             entry.username = data.username || entry.username;
             broadcastPlayerList();
+            updateScoreboard(conn.peer, entry.username);
         } else if (data?.type === "cell") {
             applyRemoteCell(data.r, data.c, data.value);
             // Relay to all other guests
@@ -143,7 +147,49 @@ function showGame() {
     document.getElementById('lobby').style.display = 'none';
     document.getElementById('game').style.display  = 'block';
     document.getElementById('puzzle-title').textContent = crossword.title || "Crossword";
+    renderScoreboard();
     renderPuzzle(crossword);
+}
+
+// ── Scoreboard ─────────────────────────────────────────────────────────────
+
+function renderScoreboard() {
+    //Add host
+    let item = document.createElement("ul");
+    item.classList += "user"
+    item.innerHTML = `${hostUsername}: `;
+    let score = document.createElement("p");
+    score.innerHTML = "0"
+    item.append(score);
+    item.dataset.peerid = "host"
+    scores["host"] = [item, score]
+    document.getElementById('scoreboard').append(item);
+
+    //Add other connections
+    for (connection in connections){
+        const {conn, peerId, username} = connection;
+        let item = document.createElement("ul");
+        item.classList += "user"
+        item.innerHTML = `${username}: `;
+        let score = document.createElement("p");
+        score.innerHTML = "0";
+        item.append(score);
+        item.dataset.peerid = peerId;
+        scores[peerId] = [item, score];
+        document.getElementById('scoreboard').append(item);
+    }
+}
+
+function updateScoreboard(peerId, username){
+    let item = document.createElement("ul");
+    item.classList += "user"
+    item.innerHTML = `${username}: `;
+    let score = document.createElement("p")
+    score.innerHTML = "0"
+    item.append(score);
+    item.dataset.peerid = peerId
+    scores[peerId] = [item, score]
+    document.getElementById('scoreboard').append(item);
 }
 
 // ── Puzzle upload ─────────────────────────────────────────────────────────────

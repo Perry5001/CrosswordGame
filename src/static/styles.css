@@ -136,6 +136,16 @@ input[type="file"] {
     padding: 1.2rem 2rem 0.5rem;
 }
 
+#scoreboard{
+    display: flex;
+    gap: 16px;
+    margin-left: auto;
+}
+
+#scoreboard .user{
+    display: flex;
+}
+
 /* ── Grid layout ─────────────────────────────────────────────── */
 .grid-wrap {
     overflow: auto;
