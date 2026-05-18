@@ -177,6 +177,8 @@ function renderScoreboard() {
         scores[peerId] = [item, score];
         document.getElementById('scoreboard').append(item);
     }
+
+    broadcast({ type: "scoreboard", scores});
 }
 
 function updateScoreboard(peerId, username=null, score=null){
@@ -198,6 +200,7 @@ function updateScoreboard(peerId, username=null, score=null){
         scores[peerId] = [item, score]
         document.getElementById('scoreboard').append(item);
     }
+    broadcast({ type: "scoreboard", scores});
 }
 
 // ── Puzzle upload ─────────────────────────────────────────────────────────────

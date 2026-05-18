@@ -109,6 +109,17 @@ function clueOnClick(r, c, dir) {
     onFocus(r, c, dir);
 }
 
+// ── Scoreboard ─────────────────────────────────────────────────────────────
+
+function renderScoreboard(scores) {
+
+    scoreboard = document.getElementById('scoreboard');
+
+    for(const item of scores){
+        scoreboard.append(scores[0])
+    }
+}
+
 // ── PeerJS ────────────────────────────────────────────────────────────────────
 const urlParams = new URLSearchParams(window.location.search);
 const hostID    = urlParams.get('id');
@@ -155,6 +166,8 @@ function connect() {
             renderPlayerList(data.players);
         } else if (data?.type === "cell") {
             applyRemoteCell(data.r, data.c, data.value);
+        } else if (data?.type === "scoreboard") {
+            renderScoreboard(data.scores);
         }
     });
 
