@@ -61,9 +61,10 @@ peer.on('error', (err) => {
 peer.on('open', (id) => {
     const guestURL = `${window.location.origin}/guest?id=${id}`;
     document.getElementById('peer-id').innerHTML =
-        `Invite link: <a href="${guestURL}" target="_blank">${guestURL}</a>`;
+        `<span style="font-size:1.6em; font-weight:700; letter-spacing:0.08em; color:#1a1a1a;">${id}</span>
+         <br><a href="${guestURL}" target="_blank" style="font-size:11px;">${guestURL}</a>`;
     document.getElementById('game-peer-id').innerHTML =
-        `Invite link: <a href="${guestURL}" target="_blank">${guestURL}</a>`;
+        `Code: <strong>${id}</strong> &nbsp;·&nbsp; <a href="${guestURL}" target="_blank">${guestURL}</a>`;
 });
 
 peer.on('connection', (conn) => {

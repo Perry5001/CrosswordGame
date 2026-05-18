@@ -1,31 +1,76 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8">
-<title>puzpy viewer</title>
-<link rel="stylesheet" href="static/styles.css">
-<script type="module" src="static/main.js" defer></script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Crossword</title>
+    <link rel="stylesheet" href="static/styles.css">
 </head>
 <body>
 
-<div class ="header">
-  <h1>Crossword Grid</h1>
-  <input type="file" id="fileInput" accept=".puz">
+<div id="lobby">
+    <div class="lobby-card">
+        <h1>🧩 Crossword</h1>
+
+        <section class="lobby-section">
+            <label>Start a new game</label>
+            <button id="hostBtn" style="width:100%; padding:10px; font-size:14px; font-weight:600; border-radius:8px;">
+                Create Game
+            </button>
+        </section>
+
+        <div class="divider">or</div>
+
+        <section class="lobby-section">
+            <label>Join a game</label>
+            <div class="row">
+                <input type="text" id="codeInput" placeholder="Enter game code" maxlength="20" autocomplete="off">
+                <button id="joinBtn">Join</button>
+            </div>
+            <span id="joinError" class="status-text" style="color:#c0392b;"></span>
+        </section>
+    </div>
 </div>
 
-<div class="grid-wrap">
-  <div class="grid" id="grid"></div>
-  <div class="clues">
-    <div class="across">
-      <h2>Across</h2>
-      <ol id="acrossList"></ol>
-    </div>
-    <div class="down">
-      <h2>Down</h2>
-      <ol id="downList"></ol>
-    </div>
-  </div>
-</div>
-<div id="hint">Click a white square to start typing. Arrow keys to navigate</div>
+<style>
+    .divider {
+        text-align: center;
+        font-size: 12px;
+        color: #bbb;
+        margin: -8px 0 22px;
+        position: relative;
+    }
+    .divider::before, .divider::after {
+        content: '';
+        position: absolute;
+        top: 50%;
+        width: 42%;
+        height: 0.5px;
+        background: #e0e0e0;
+    }
+    .divider::before { left: 0; }
+    .divider::after  { right: 0; }
+</style>
+
+<script>
+    document.getElementById('hostBtn').addEventListener('click', () => {
+        window.location.href = '/host';
+    });
+
+    function joinGame() {
+        const code = document.getElementById('codeInput').value.trim();
+        if (!code) {
+            document.getElementById('joinError').textContent = 'Please enter a game code.';
+            return;
+        }
+        window.location.href = `/guest?id=${encodeURIComponent(code)}`;
+    }
+
+    document.getElementById('joinBtn').addEventListener('click', joinGame);
+    document.getElementById('codeInput').addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') joinGame();
+    });
+</script>
+
 </body>
 </html>

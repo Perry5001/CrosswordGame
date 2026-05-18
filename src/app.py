@@ -11,7 +11,7 @@ CORS(app)
 
 @app.route('/')
 def serve_index():
-    return send_from_directory('.', 'host.html')
+    return send_from_directory('.', 'index.html')
 
 @app.route('/host')
 def serve_host():
@@ -64,4 +64,4 @@ def upload_puzzle():
 
 
 if __name__ == '__main__':
-    app.run(port=5000, debug=True)
+    app.run(port=5000)
