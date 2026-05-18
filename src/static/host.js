@@ -56,12 +56,12 @@ peer.on('open', (id) => {
 peer.on('connection', (conn) => {
     const entry = { conn, peerId: conn.peer, username: "Guest" };
     connections.push(entry);
-    updateScoreboard(conn.peer, entry.username);
 
     conn.on('open', () => {
         // If game already started send them the current state
         if (gameStarted && crossword) {
             conn.send({ type: "start", crossword });
+            updateScoreboard(conn.peer, entry.username, "0");
         }
         // Always send current player list
         broadcastPlayerList();
@@ -71,11 +71,10 @@ peer.on('connection', (conn) => {
         if (data?.type === "join") {
             entry.username = data.username || "Guest";
             broadcastPlayerList();
-            updateScoreboard(conn.peer, entry.username);
         } else if (data?.type === "username") {
             entry.username = data.username || entry.username;
             broadcastPlayerList();
-            updateScoreboard(conn.peer, entry.username);
+            updateScoreboard(conn.peer, entry.username, "0");
         } else if (data?.type === "cell") {
             applyRemoteCell(data.r, data.c, data.value);
             // Relay to all other guests
@@ -180,16 +179,25 @@ function renderScoreboard() {
     }
 }
 
-function updateScoreboard(peerId, username){
-    let item = document.createElement("ul");
-    item.classList += "user"
-    item.innerHTML = `${username}: `;
-    let score = document.createElement("p")
-    score.innerHTML = "0"
-    item.append(score);
-    item.dataset.peerid = peerId
-    scores[peerId] = [item, score]
-    document.getElementById('scoreboard').append(item);
+function updateScoreboard(peerId, username=null, score=null){
+    if(Object.hasOwn(scores,peerID) && username){
+        let user = scores[peerID];
+        user[0].innerHTML = `${username}: `;
+    }
+    if(Object.hasOwn(scores,peerID) && score){
+        let user = scores[peerID];
+        user[1].innerHTML = score;
+    }else{
+        let item = document.createElement("ul");
+        item.classList += "user"
+        item.innerHTML = `${username ? username : "Guest"}: `;
+        let score = document.createElement("p")
+        score.innerHTML = score ? score: "0";
+        item.append(score);
+        item.dataset.peerid = peerId
+        scores[peerId] = [item, score]
+        document.getElementById('scoreboard').append(item);
+    }
 }
 
 // ── Puzzle upload ─────────────────────────────────────────────────────────────
