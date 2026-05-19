@@ -42,26 +42,25 @@ setOnPositionChange((r, c, dir) => {
 });
 
 // ── PeerJS ────────────────────────────────────────────────────────────────────
-const peer = new Peer(Math.random().toString(36).slice(2, 8), {
-    config: {
-        iceServers: [
-            // { urls: "stun:stun.l.google.com:19302" },
-            // { urls: "stun:stun1.l.google.com:19302" },
-            // { urls: "stun:stun2.l.google.com:19302" },
-            {
-                "urls": [
-                    "stun:stun.cloudflare.com:3478",
-                    "turn:turn.cloudflare.com:3478?transport=udp",
-                    "turn:turn.cloudflare.com:3478?transport=tcp",
-                    "turns:turn.cloudflare.com:5349?transport=tcp"
-                ],
-                "username": "g039e299bf696e1b3aefcfe891d884521998877757fefeacf48aa39d4f5982c4",
-                "credential": "5e5e779e4f1a19184f615de7f147a7f49a00ef5b1a24e4b6ed5ca1a20bca397e"
-            }
-        ]
-    },
-    debug: 2
-});
+async function createPeer() {
+    const res = await fetch(
+        "https://crosswordgame.metered.live/api/v1/turn/credentials?apiKey=8a2733f5f1aca8286b3ea73f87d25035c8d5"
+    );
+    const iceServers = await res.json();
+
+    const peer = new Peer(Math.random().toString(36).slice(2, 8), {
+        config: { iceServers }
+    });
+
+    peer.on("open", (id) => {
+        document.getElementById("peer-id").textContent = id;
+        document.getElementById("game-peer-id").textContent = `Game Code: ${id}`;
+    });
+
+    peer.on("connection", onConnection);  // move your existing handler here
+}
+
+createPeer();
 
 peer.on('error', (err) => {
     console.error("PeerJS error:", err.type, err);

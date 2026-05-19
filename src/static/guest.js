@@ -131,16 +131,22 @@ function clueOnClick(r, c, dir) {
 const urlParams = new URLSearchParams(window.location.search);
 const hostID    = urlParams.get('id');
 
-const peer = new Peer(undefined, {
-    config: {
-        iceServers: [
-            { urls: "stun:stun.l.google.com:19302" },
-            { urls: "stun:stun1.l.google.com:19302" },
-            { urls: "stun:stun2.l.google.com:19302" },
-        ]
-    },
-    debug: 2
-});
+async function createPeer() {
+    const res = await fetch(
+        "https://crosswordgame.metered.live/api/v1/turn/credentials?apiKey=8a2733f5f1aca8286b3ea73f87d25035c8d5"
+    );
+    const iceServers = await res.json();
+
+    const peer = new Peer({ config: { iceServers } });
+
+    peer.on("open", () => {
+        const params = new URLSearchParams(window.location.search);
+        const hostId = params.get("id");
+        if (hostId) connectToHost(hostId);  // your existing connect logic
+    });
+}
+
+createPeer();
 
 peer.on('error', (err) => {
     log(`⚠️ PeerJS error: ${err.type}`);
