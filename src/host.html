@@ -32,6 +32,17 @@
             <div class="row">
                 <input type="file" id="fileInput" accept=".puz">
             </div>
+            <p>or</p>
+            <div class="row">
+                <button id="archiveBtn">Load from Archive</button>
+                <div id="selectors" hidden="true">
+                    <select id="source"></select>
+                    <select id="year"></select>
+                    <select id="month"></select>
+                    <select id="day"></select>
+                    <button id="getPuzzle" disabled>Get Puzzle</button>
+                </div>
+            </div>
             <span id="upload-status" class="status-text"></span>
         </section>
 

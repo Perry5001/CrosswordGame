@@ -45,9 +45,19 @@ setOnPositionChange((r, c, dir) => {
 const peer = new Peer(Math.random().toString(36).slice(2, 8), {
     config: {
         iceServers: [
-            { urls: "stun:stun.l.google.com:19302" },
-            { urls: "stun:stun1.l.google.com:19302" },
-            { urls: "stun:stun2.l.google.com:19302" },
+            // { urls: "stun:stun.l.google.com:19302" },
+            // { urls: "stun:stun1.l.google.com:19302" },
+            // { urls: "stun:stun2.l.google.com:19302" },
+            {
+                "urls": [
+                    "stun:stun.cloudflare.com:3478",
+                    "turn:turn.cloudflare.com:3478?transport=udp",
+                    "turn:turn.cloudflare.com:3478?transport=tcp",
+                    "turns:turn.cloudflare.com:5349?transport=tcp"
+                ],
+                "username": "g039e299bf696e1b3aefcfe891d884521998877757fefeacf48aa39d4f5982c4",
+                "credential": "5e5e779e4f1a19184f615de7f147a7f49a00ef5b1a24e4b6ed5ca1a20bca397e"
+            }
         ]
     },
     debug: 2
@@ -288,7 +298,7 @@ document.getElementById('fileInput').addEventListener('change', (e) => {
         .then(data => {
             if (data.error) { status.textContent = `Error: ${data.error}`; return; }
             crossword = data;
-            status.textContent = `✅ Loaded: ${crossword.title || file.name}`;
+            status.textContent = `Loaded: ${crossword.title || file.name}`;
             document.getElementById('startBtn').disabled = false;
         })
         .catch(err => {
@@ -298,6 +308,204 @@ document.getElementById('fileInput').addEventListener('change', (e) => {
     };
     reader.readAsArrayBuffer(file);
 });
+
+// ── Archive ────────────────────────────────────────────────────────────────────
+
+document.getElementById('archiveBtn').addEventListener('click', async () => {
+    document.getElementById("archiveBtn").hidden = true;
+    let selectors = document.getElementById("selectors")
+    selectors.hidden = false;
+    let sourceSelector = document.getElementById("source")
+    let yearSelector = document.getElementById("year")
+    let monthSelector = document.getElementById("month")
+    let daySelector = document.getElementById("day")
+
+    await renderSources(sourceSelector);
+    await renderYears(sourceSelector, yearSelector);
+    await renderMonths(sourceSelector, yearSelector, monthSelector);
+    await renderDays(sourceSelector, yearSelector, monthSelector, daySelector);
+
+    sourceSelector.addEventListener('change', () => selectorChange(0));
+    yearSelector.addEventListener('change', () => selectorChange(1));
+    monthSelector.addEventListener('change', () => selectorChange(2));
+    daySelector.addEventListener('change', () => selectorChange(3));
+
+});
+
+document.getElementById('getPuzzle').addEventListener('click', async () => {
+    let source = document.getElementById("source").value
+    let year = document.getElementById("year").value
+    let month = document.getElementById("month").value
+    let day = document.getElementById("day").value
+    console.log(`${source}, ${year}, ${month}, ${day}, `)
+
+    await fetch(`${API_BASE}/get-puzzle`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({"source": source, "year": year, "month": month, "day" : day})
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.error) { status.textContent = `Error: ${data.error}`; return; }
+        crossword = data;
+        const status = document.getElementById('upload-status');
+        status.textContent = `Loaded: ${crossword.title || file.name}`;
+        document.getElementById('startBtn').disabled = false;
+    })
+    .catch(err => {
+        console.error(err);
+    });
+});
+
+async function renderSources(sourceSelector) {
+    //Load sources
+    await fetch(`${API_BASE}/sources-list`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({"msg": "hello"})
+    })
+    .then(r => r.json())
+    .then(data => {
+        for (let source of data.sources){
+            let option = document.createElement("option")
+            option.value = source
+            option.innerHTML = source
+            sourceSelector.appendChild(option)
+        }
+
+        sourceSelector.children[0].selected = true;
+    })
+    .catch(err => {
+        console.error(err);
+    });
+}
+
+async function renderYears(sourceSelector, yearSelector) {
+    
+    let source = sourceSelector.value
+    console.log(source)
+
+    //Load sources
+    await fetch(`${API_BASE}/years-list`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({"source": source})
+    })
+    .then(r => r.json())
+    .then(data => {
+        let value = yearSelector.children.length
+        for (let i = 0; i < value; i++){ 
+            console.log(value);
+            yearSelector.children[0].remove();
+        }
+
+        for (let year of data.years){
+            let option = document.createElement("option")
+            option.value = year
+            option.innerHTML = year
+            yearSelector.appendChild(option)
+        }
+
+        yearSelector.children[0].selected = true;
+    })
+    .catch(err => {
+        console.error(err);
+    });
+}
+
+async function renderMonths(sourceSelector, yearSelector, monthSelector) {
+    
+    let source = sourceSelector.value
+    let year = yearSelector.value
+    
+    console.log(source)
+    console.log(year)
+
+    //Load sources
+    await fetch(`${API_BASE}/months-list`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({"source": source, "year": year})
+    })
+    .then(r => r.json())
+    .then(data => {
+        let value = monthSelector.children.length
+        for (let i = 0; i < value; i++){ 
+            monthSelector.children[0].remove();
+        }
+
+        for (let month of data.months){
+            let option = document.createElement("option")
+            option.value = month
+            option.innerHTML = month
+            monthSelector.appendChild(option)
+        }
+
+        monthSelector.children[0].selected = true;
+    })
+    .catch(err => {
+        console.error(err);
+    });
+}
+
+async function renderDays(sourceSelector, yearSelector, monthSelector, daySelector) {
+    
+    let source = sourceSelector.value
+    let year = yearSelector.value
+    let month = monthSelector.value
+
+    //Load sources
+    await fetch(`${API_BASE}/days-list`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({"source": source, "year": year, "month": month})
+    })
+    .then(r => r.json())
+    .then(data => {
+        let value = daySelector.children.length
+        for (let i = 0; i < value; i++){ 
+            daySelector.children[0].remove();
+        }
+
+        for (let day of data.days){
+            let option = document.createElement("option")
+            option.value = day
+            option.innerHTML = day
+            daySelector.appendChild(option)
+        }
+
+        daySelector.children[0].selected = true;
+        document.getElementById('getPuzzle').disabled = false;
+    })
+    .catch(err => {
+        console.error(err);
+    });
+}
+
+async function selectorChange(num){
+    let sourceSelector = document.getElementById("source")
+    let yearSelector = document.getElementById("year")
+    let monthSelector = document.getElementById("month")
+    let daySelector = document.getElementById("day")
+
+    switch (num){
+        case 0:
+            console.log("Source has been changed")
+            await renderYears(sourceSelector, yearSelector);
+            await renderMonths(sourceSelector, yearSelector, monthSelector);
+            await renderDays(sourceSelector, yearSelector, monthSelector, daySelector);
+            break;
+        case 1:
+            console.log("Year has been changed")
+            await renderMonths(sourceSelector, yearSelector, monthSelector);
+            await renderDays(sourceSelector, yearSelector, monthSelector, daySelector);
+            break;
+        case 2:
+            console.log("Month has been changed")
+            await renderDays(sourceSelector, yearSelector, monthSelector, daySelector);
+            break;
+    }
+}
 
 // ── Render ────────────────────────────────────────────────────────────────────
 function renderPuzzle(cw) {
