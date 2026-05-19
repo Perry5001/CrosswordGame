@@ -13,6 +13,11 @@ h1 {
     letter-spacing: -0.3px;
 }
 
+h2 {
+    font-size: 16px;
+    font-weight: 200;
+}
+
 button {
     font-size: 13px;
     padding: 6px 14px;
@@ -45,7 +50,7 @@ button:disabled { background: #e8e8e8; color: #aaa; cursor: not-allowed; }
     max-width: 460px;
 }
 
-.lobby-card h1 {
+.lobby-card .title {
     margin-bottom: 28px;
     text-align: center;
 }
