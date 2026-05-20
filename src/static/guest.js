@@ -142,50 +142,46 @@ async function createPeer() {
     peer.on("open", () => {
         const params = new URLSearchParams(window.location.search);
         const hostId = params.get("id");
-        if (hostId) connectToHost(hostId);  // your existing connect logic
+        if (hostID) connect();
+        else log("⚠️ No host ID in URL.");
     });
+
+    peer.on('error', (err) => {
+        log(`⚠️ PeerJS error: ${err.type}`);
+        console.error(err);
+    });
+
+    function connect() {
+        if (conn && conn.open) return;
+        log("Connecting to host…");
+        conn = peer.connect(hostID);
+
+        conn.on('open', () => {
+            log("✅ Connected — waiting for host to start…");
+            conn.send({ type: "join", username: guestUsername });
+        });
+
+        conn.on('data', (data) => {
+            if (data?.type === "start" && data.crossword) {
+                showGame(data.crossword);
+            } else if (data?.type === "player-list") {
+                renderPlayerList(data.players);
+            } else if (data?.type === "cell") {
+                applyRemoteCell(data.r, data.c, data.value);
+            } else if (data?.type === "scoreboard") {
+                renderScoreboard(data.scores);
+            } else if (data?.type === "position") {
+                if (data.r === -1) {
+                    removeRemoteCursor(data.peerId);
+                } else {
+                    applyRemoteCursor(data.peerId, data.username, data.r, data.c, data.dir);
+                }
+            }
+        });
+
+        conn.on('close', () => { log("❌ Disconnected from host"); conn = null; });
+        conn.on('error', (err) => log(`⚠️ ${err}`));
+    }
 }
 
 createPeer();
-
-peer.on('error', (err) => {
-    log(`⚠️ PeerJS error: ${err.type}`);
-    console.error(err);
-});
-
-peer.on('open', () => {
-    if (hostID) connect();
-    else log("⚠️ No host ID in URL.");
-});
-
-function connect() {
-    if (conn && conn.open) return;
-    log("Connecting to host…");
-    conn = peer.connect(hostID);
-
-    conn.on('open', () => {
-        log("✅ Connected — waiting for host to start…");
-        conn.send({ type: "join", username: guestUsername });
-    });
-
-    conn.on('data', (data) => {
-        if (data?.type === "start" && data.crossword) {
-            showGame(data.crossword);
-        } else if (data?.type === "player-list") {
-            renderPlayerList(data.players);
-        } else if (data?.type === "cell") {
-            applyRemoteCell(data.r, data.c, data.value);
-        } else if (data?.type === "scoreboard") {
-            renderScoreboard(data.scores);
-        } else if (data?.type === "position") {
-            if (data.r === -1) {
-                removeRemoteCursor(data.peerId);
-            } else {
-                applyRemoteCursor(data.peerId, data.username, data.r, data.c, data.dir);
-            }
-        }
-    });
-
-    conn.on('close', () => { log("❌ Disconnected from host"); conn = null; });
-    conn.on('error', (err) => log(`⚠️ ${err}`));
-}

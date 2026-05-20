@@ -57,91 +57,88 @@ async function createPeer() {
         document.getElementById("game-peer-id").textContent = `Game Code: ${id}`;
     });
 
-    peer.on("connection", onConnection);  // move your existing handler here
-}
-
-createPeer();
-
-peer.on('error', (err) => {
-    console.error("PeerJS error:", err.type, err);
-    document.getElementById('peer-id').textContent = `⚠️ PeerJS error: ${err.type}`;
-});
-
-peer.on('open', (id) => {
-    const guestURL = `${window.location.origin}/guest?id=${id}`;
-    document.getElementById('peer-id').innerHTML =
-        `<span style="font-size:1.6em; font-weight:700; letter-spacing:0.08em; color:#1a1a1a;">${id}</span>
-         <br><a href="${guestURL}" target="_blank" style="font-size:11px;">${guestURL}</a>`;
-    document.getElementById('game-peer-id').innerHTML =
-        `Code: <strong>${id}</strong> &nbsp;·&nbsp; <a href="${guestURL}" target="_blank">${guestURL}</a>`;
-});
-
-peer.on('connection', (conn) => {
-    const entry = { conn, peerId: conn.peer, username: "Guest" };
-    connections.push(entry);
-
-    conn.on('open', () => {
-        if (gameStarted && crossword) {
-            conn.send({ type: "start", crossword });
-            // Add to scoreboard when joining mid-game
-            scores[entry.peerId] = { username: entry.username, score: 0 };
-            correctCells[entry.peerId] = new Set();
-            renderScoreboard();
-            broadcastScoreboard();
-        }
-        broadcastPlayerList();
+    peer.on('error', (err) => {
+        console.error("PeerJS error:", err.type, err);
+        document.getElementById('peer-id').textContent = `⚠️ PeerJS error: ${err.type}`;
+    });
+    peer.on('open', (id) => {
+        const guestURL = `${window.location.origin}/guest?id=${id}`;
+        document.getElementById('peer-id').innerHTML =
+            `<span style="font-size:1.6em; font-weight:700; letter-spacing:0.08em; color:#1a1a1a;">${id}</span>
+            <br><a href="${guestURL}" target="_blank" style="font-size:11px;">${guestURL}</a>`;
+        document.getElementById('game-peer-id').innerHTML =
+            `Code: <strong>${id}</strong> &nbsp;·&nbsp; <a href="${guestURL}" target="_blank">${guestURL}</a>`;
     });
 
-    conn.on('data', (data) => {
-        if (data?.type === "join") {
-            entry.username = data.username || "Guest";
-            renderScoreboard();
-            broadcastPlayerList();
+    peer.on('connection', (conn) => {
+        const entry = { conn, peerId: conn.peer, username: "Guest" };
+        connections.push(entry);
 
-        } else if (data?.type === "username") {
-            entry.username = data.username || entry.username;
-            // Update name in scores if game already running
-            if (scores[entry.peerId]) {
-                scores[entry.peerId].username = entry.username;
+        conn.on('open', () => {
+            if (gameStarted && crossword) {
+                conn.send({ type: "start", crossword });
+                // Add to scoreboard when joining mid-game
+                scores[entry.peerId] = { username: entry.username, score: 0 };
+                correctCells[entry.peerId] = new Set();
                 renderScoreboard();
                 broadcastScoreboard();
             }
             broadcastPlayerList();
+        });
 
-        } else if (data?.type === "cell") {
-            applyRemoteCell(data.r, data.c, data.value);
-            // Relay to all other guests
-            for (const other of connections) {
-                if (other !== entry && other.conn.open) {
-                    other.conn.send({ type: "cell", r: data.r, c: data.c, value: data.value });
+        conn.on('data', (data) => {
+            if (data?.type === "join") {
+                entry.username = data.username || "Guest";
+                renderScoreboard();
+                broadcastPlayerList();
+
+            } else if (data?.type === "username") {
+                entry.username = data.username || entry.username;
+                // Update name in scores if game already running
+                if (scores[entry.peerId]) {
+                    scores[entry.peerId].username = entry.username;
+                    renderScoreboard();
+                    broadcastScoreboard();
+                }
+                broadcastPlayerList();
+
+            } else if (data?.type === "cell") {
+                applyRemoteCell(data.r, data.c, data.value);
+                // Relay to all other guests
+                for (const other of connections) {
+                    if (other !== entry && other.conn.open) {
+                        other.conn.send({ type: "cell", r: data.r, c: data.c, value: data.value });
+                    }
+                }
+                // Recalculate this guest's score
+                recalculateScore(entry.peerId, data.r, data.c, data.value);
+
+            } else if (data?.type === "position") {
+                // Show this guest's cursor on the host's grid
+                applyRemoteCursor(entry.peerId, entry.username, data.r, data.c, data.dir);
+                // Relay to all other guests so they see it too
+                for (const other of connections) {
+                    if (other !== entry && other.conn.open) {
+                        other.conn.send({ type: "position", peerId: entry.peerId, username: entry.username, r: data.r, c: data.c, dir: data.dir });
+                    }
                 }
             }
-            // Recalculate this guest's score
-            recalculateScore(entry.peerId, data.r, data.c, data.value);
+        });
 
-        } else if (data?.type === "position") {
-            // Show this guest's cursor on the host's grid
-            applyRemoteCursor(entry.peerId, entry.username, data.r, data.c, data.dir);
-            // Relay to all other guests so they see it too
-            for (const other of connections) {
-                if (other !== entry && other.conn.open) {
-                    other.conn.send({ type: "position", peerId: entry.peerId, username: entry.username, r: data.r, c: data.c, dir: data.dir });
-                }
-            }
-        }
+        conn.on('close', () => {
+            connections = connections.filter(e => e !== entry);
+            delete scores[entry.peerId];
+            delete correctCells[entry.peerId];
+            removeRemoteCursor(entry.peerId);
+            // Tell guests to remove this cursor too
+            broadcast({ type: "position", peerId: entry.peerId, username: '', r: -1, c: -1 });
+            broadcastPlayerList();
+            broadcastScoreboard();
+        });
     });
+}
 
-    conn.on('close', () => {
-        connections = connections.filter(e => e !== entry);
-        delete scores[entry.peerId];
-        delete correctCells[entry.peerId];
-        removeRemoteCursor(entry.peerId);
-        // Tell guests to remove this cursor too
-        broadcast({ type: "position", peerId: entry.peerId, username: '', r: -1, c: -1 });
-        broadcastPlayerList();
-        broadcastScoreboard();
-    });
-});
+createPeer();
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function broadcast(msg) {
