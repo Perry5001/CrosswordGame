@@ -271,7 +271,7 @@ def get_years(source):
 
     years = archive[source]
 
-    return sorted(years.keys())
+    return sorted(years.keys(), reverse=True)
 
 # ============================================================
 # GET MONTHS
