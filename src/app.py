@@ -46,6 +46,8 @@ def upload_puzzle():
     finally:
         os.unlink(tmp.name)
 
+    print(p.clues)
+
     numbering = p.clue_numbering()
 
     result = {
@@ -60,6 +62,14 @@ def upload_puzzle():
         },
         "solution": p.solution
     }
+
+    print('Across Clues:')
+    for clue in numbering.across:
+        print(f"{clue.number}. {clue.text} - {clue.solution}")
+
+    print('\nDown Clues:')
+    for clue in numbering.down:
+        print(f"{clue.number}. {clue.text} - {clue.solution}")
 
     return jsonify(result)
 
@@ -108,6 +118,8 @@ def get_puzzle():
     # finally:
     #     os.unlink(tmp.name)
 
+    print(p.clues)
+
     numbering = p.clue_numbering()
 
     result = {
@@ -122,7 +134,13 @@ def get_puzzle():
         },
         "solution": p.solution
     }
-    print(result)
+    print('Across Clues:')
+    for clue in numbering.across:
+        print(f"{clue.number}. {clue.text} - {clue.solution}")
+
+    print('\nDown Clues:')
+    for clue in numbering.down:
+        print(f"{clue.number}. {clue.text} - {clue.solution}")
 
     return jsonify(result)
 

@@ -167,7 +167,18 @@ def create_puz(data, title="", author="Unknown"):
     across.sort(key=lambda x: x[0])
     down.sort(key=lambda x: x[0])
 
-    p.clues = [c[1] for c in (across + down)]
+    across_dict = dict(across)
+    down_dict = dict(down)
+    all_numbers = sorted(set(across_dict) | set(down_dict))
+
+    ordered_clues = []
+    for num in all_numbers:
+        if num in across_dict:
+            ordered_clues.append(across_dict[num])
+        if num in down_dict:
+            ordered_clues.append(down_dict[num])
+
+    p.clues = ordered_clues
 
     p.title = title
     p.author = author
