@@ -26,7 +26,7 @@ function highlightClue(r, c, clueNum = null, dir) {
         ? `.clue[data-num="${clueNum}"][data-dir="${dir}"]`
         : `.clue[data-r="${r}"][data-c="${c}"]`;
     const clue = document.querySelector(selector);
-    if (clue) clue.classList.add("focused-clue");
+    if (clue) clue.classList.add("focused-clue"); clue.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 setHighlightClue(highlightClue);
 
