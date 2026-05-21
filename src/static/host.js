@@ -43,14 +43,32 @@ setOnPositionChange((r, c, dir) => {
 
 // ── PeerJS ────────────────────────────────────────────────────────────────────
 async function createPeer() {
-    const res = await fetch(
-        "https://crosswordgame.metered.live/api/v1/turn/credentials?apiKey=8a2733f5f1aca8286b3ea73f87d25035c8d5"
-    );
-    const iceServers = await res.json();
 
-    const peer = new Peer(Math.random().toString(36).slice(2, 8), {
-        config: { iceServers }
-    });
+    const peer = new Peer(Math.random().toString(36).slice(2, 8), { config: { iceServers: [
+        {
+            urls: "stun:stun.relay.metered.ca:80",
+        },
+        {
+            urls: "turn:global.relay.metered.ca:80",
+            username: "75d1952d9c5038c533d1f7d0",
+            credential: "p8ezSCXYfu1Py8TO",
+        },
+        {
+            urls: "turn:global.relay.metered.ca:80?transport=tcp",
+            username: "75d1952d9c5038c533d1f7d0",
+            credential: "p8ezSCXYfu1Py8TO",
+        },
+        {
+            urls: "turn:global.relay.metered.ca:443",
+            username: "75d1952d9c5038c533d1f7d0",
+            credential: "p8ezSCXYfu1Py8TO",
+        },
+        {
+            urls: "turns:global.relay.metered.ca:443?transport=tcp",
+            username: "75d1952d9c5038c533d1f7d0",
+            credential: "p8ezSCXYfu1Py8TO",
+        }
+    ]} });
 
     peer.on("open", (id) => {
         document.getElementById("peer-id").textContent = id;
