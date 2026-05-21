@@ -132,11 +132,6 @@ const urlParams = new URLSearchParams(window.location.search);
 const hostID    = urlParams.get('id');
 
 async function createPeer() {
-    const res = await fetch(
-        "https://crosswordgame.metered.live/api/v1/turn/credentials?apiKey=8a2733f5f1aca8286b3ea73f87d25035c8d5" //why is your api key in plaintext? what a smart boy
-    );
-    const iceServers = await res.json();
-
     const peer = new Peer({ config: { iceServers: [
       {
         urls: "stun:stun.relay.metered.ca:80",
