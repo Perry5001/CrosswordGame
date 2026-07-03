@@ -610,7 +610,7 @@ document.getElementById("revealPuzzle").addEventListener('click', () => {
 
 function revealLetterPending(peerId, row=null, col=null) {
     let cell;
-    if(peerId === "host" && (!row || !col)){
+    if(peerId === "host" && (row === null || col === null)){
         cell = document.getElementsByClassName("focused")[0];
         row = parseInt(cell.dataset.r);
         col = parseInt(cell.dataset.c);
