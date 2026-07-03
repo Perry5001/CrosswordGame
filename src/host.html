@@ -65,6 +65,12 @@
     <div class="header">
         <h1 id="puzzle-title">Crossword</h1>
         <div id="game-peer-id" style="font-size:0.8em;"></div>
+        <div id="help-buttons">
+            <button id="revealLetter">Reveal Letter</button>
+            <button id="revealWord">Reveal Word</button>
+            <button id="revealPuzzle">Reveal Puzzle</button>
+            <button id="checkPuzzle">Check Puzzle</button>
+        </div>
         <ol id="scoreboard" style="list-style:none; padding: 0 2rem 0.5rem;"></ol>
     </div>
 
@@ -83,6 +89,16 @@
     </div>
 
     <div id="hint">Click a white square to start typing. Arrow keys to navigate.</div>
+</div>
+
+
+<!-- ── REVEAL PUZZLE CONFIRMATION ───────────────────────────── -->
+<div id="reveal-puzzle" class="popup" style="display:none;">
+</div>
+
+<!-- ── END ──────────────────────────────────────────────────── -->
+<div id="end-game" class="popup" style="display:none;">
+    
 </div>
 
 </body>

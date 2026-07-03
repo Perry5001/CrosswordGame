@@ -1,4 +1,4 @@
-import { buildGrid, cellSize, onFocus, setHighlightClue, setOnCellChange, applyRemoteCell, cells, setOnPositionChange, applyRemoteCursor, removeRemoteCursor } from "./crossword.js";
+import { buildGrid, cellSize, onFocus, updateCellStatus, setHighlightClue, setOnCellChange, applyRemoteCell, cells, setOnPositionChange, applyRemoteCursor, removeRemoteCursor, crosswordString, direction, peerColor} from "./crossword.js";
 
 const API_BASE = window.location.hostname.includes("127.0.0.1")
     ? "http://127.0.0.1:5000"
@@ -19,6 +19,10 @@ let scores = {};
 // { [peerId]: Set of "r,c" strings }
 let correctCells = {};
 
+//pendingReveals: tracks which players have asked to reveal which cells
+// { "r,c" as string : [peerID_1, peerID_2, ...]}
+let pendingReveals = {};
+
 // ── Clue highlighting ─────────────────────────────────────────────────────────
 function highlightClue(r, c, clueNum = null, dir) {
     for (const clue of cluesObjects) clue.div.classList.remove("focused-clue");
@@ -32,8 +36,9 @@ setHighlightClue(highlightClue);
 
 // When host types, recalculate host score then broadcast cell + scoreboard
 setOnCellChange((r, c, value) => {
-    broadcast({ type: "cell", r, c, value });
+    broadcast({ type: "cell", r, c, value, peerId: "host"});
     recalculateScore("host", r, c, value);
+    updateCellStatus("self", r, c, value);
 });
 
 // When host moves, broadcast position
@@ -43,8 +48,9 @@ setOnPositionChange((r, c, dir) => {
 
 // ── PeerJS ────────────────────────────────────────────────────────────────────
 async function createPeer() {
-
-    const peer = new Peer(Math.random().toString(36).slice(2, 8), { config: { iceServers: [
+    let hostid = Math.random().toString(36).slice(2, 8);
+    hostid = 987654
+    const peer = new Peer(hostid, { config: { iceServers: [
         {
             urls: "stun:stun.relay.metered.ca:80",
         },
@@ -105,41 +111,52 @@ async function createPeer() {
         });
 
         conn.on('data', (data) => {
-            if (data?.type === "join") {
-                entry.username = data.username || "Guest";
-                renderScoreboard();
-                broadcastPlayerList();
-
-            } else if (data?.type === "username") {
-                entry.username = data.username || entry.username;
-                // Update name in scores if game already running
-                if (scores[entry.peerId]) {
-                    scores[entry.peerId].username = entry.username;
+            switch (data?.type){
+                case "join":
+                    entry.username = data.username || "Guest";
                     renderScoreboard();
-                    broadcastScoreboard();
-                }
-                broadcastPlayerList();
-
-            } else if (data?.type === "cell") {
-                applyRemoteCell(data.r, data.c, data.value);
-                // Relay to all other guests
-                for (const other of connections) {
-                    if (other !== entry && other.conn.open) {
-                        other.conn.send({ type: "cell", r: data.r, c: data.c, value: data.value });
+                    broadcastPlayerList();
+                    break;
+                case "username":
+                    entry.username = data.username || entry.username;
+                    // Update name in scores if game already running
+                    if (scores[entry.peerId]) {
+                        scores[entry.peerId].username = entry.username;
+                        renderScoreboard();
+                        broadcastScoreboard();
                     }
-                }
-                // Recalculate this guest's score
-                recalculateScore(entry.peerId, data.r, data.c, data.value);
-
-            } else if (data?.type === "position") {
-                // Show this guest's cursor on the host's grid
-                applyRemoteCursor(entry.peerId, entry.username, data.r, data.c, data.dir);
-                // Relay to all other guests so they see it too
-                for (const other of connections) {
-                    if (other !== entry && other.conn.open) {
-                        other.conn.send({ type: "position", peerId: entry.peerId, username: entry.username, r: data.r, c: data.c, dir: data.dir });
+                    broadcastPlayerList();
+                    break;
+                case "cell":
+                    applyRemoteCell(data.r, data.c, data.value, entry.peerId);
+                    // Relay to all other guests
+                    for (const other of connections) {
+                        if (other !== entry && other.conn.open) {
+                            other.conn.send({ type: "cell", r: data.r, c: data.c, value: data.value, peerId: entry.peerId});
+                        }
                     }
-                }
+                    // Recalculate this guest's score
+                    recalculateScore(entry.peerId, data.r, data.c, data.value);
+                    break;
+                case "position":
+                    // Show this guest's cursor on the host's grid
+                    applyRemoteCursor(entry.peerId, entry.username, data.r, data.c, data.dir);
+                    // Relay to all other guests so they see it too
+                    for (const other of connections) {
+                        if (other !== entry && other.conn.open) {
+                            other.conn.send({ type: "position", peerId: entry.peerId, username: entry.username, r: data.r, c: data.c, dir: data.dir });
+                        }
+                    }
+                    break;
+                case "revealPending":
+                    switch (data.level){
+                        case "letter":
+                            revealLetterPending(entry.peerId, data.r, data.c);
+                            break;
+                        case "word":
+                            revealWordPending(entry.peerId, data.r, data.c, data.dir);
+                    }
+                    break;
             }
         });
 
@@ -162,6 +179,14 @@ createPeer();
 function broadcast(msg) {
     for (const entry of connections) {
         if (entry.conn.open) entry.conn.send(msg);
+    }
+}
+
+function broadcastOthers(peerId, msg) {
+    for (const entry of connections) {
+        if(entry.peerId != peerId){
+            if (entry.conn.open) entry.conn.send(msg);
+        }
     }
 }
 
@@ -216,8 +241,8 @@ function recalculateScore(peerId, row, col, value) {
     }
     // If neither condition, score doesn't change (wrong→wrong, empty→empty)
 
-    renderScoreboard();
-    broadcastScoreboard();
+    //renderScoreboard();
+    //broadcastScoreboard();
 }
 
 function broadcastScoreboard() {
@@ -230,6 +255,7 @@ function broadcastScoreboard() {
     broadcast({ type: "scoreboard", scores: scoreData });
 }
 
+//!!Need to change this to render the popup and not the list
 function renderScoreboard() {
     const el = document.getElementById('scoreboard');
     if (!el) return;
@@ -253,8 +279,9 @@ function initScoreboard() {
         scores[entry.peerId] = { username: entry.username, score: 0 };
         correctCells[entry.peerId] = new Set();
     }
-    renderScoreboard();
-    broadcastScoreboard();
+    correctCells["revealed"] = new Set();
+    //renderScoreboard();
+    //broadcastScoreboard();
 }
 
 // ── Username ──────────────────────────────────────────────────────────────────
@@ -523,7 +550,7 @@ async function selectorChange(num){
 
 // ── Render ────────────────────────────────────────────────────────────────────
 function renderPuzzle(cw) {
-    buildGrid(cw.width, cw.height, cw.fill);
+    buildGrid(cw.width, cw.height, cw.fill, cw.solution);
     const acrosslist = document.getElementById('acrossList');
     const downlist   = document.getElementById('downList');
     acrosslist.style.height   = cellSize * cw.height - 28 + 'px';
@@ -567,6 +594,103 @@ function clueOnClick(r, c, dir) {
     document.querySelector(`[data-r="${r}"][data-c="${c}"]`).querySelector('input').focus();
     onFocus(r, c, dir);
 }
+
+// ── Reveal ────────────────────────────────────────────────────────────────────
+document.getElementById("revealLetter").addEventListener('click', () => {
+    revealLetterPending("host");
+});
+
+document.getElementById("revealWord").addEventListener('click', () => {
+    revealWordPending("host");
+});
+
+document.getElementById("revealPuzzle").addEventListener('click', () => {
+    //revealPuzzlePending();
+});
+
+function revealLetterPending(peerId, row=null, col=null) {
+    let cell;
+    if(peerId === "host" && (!row || !col)){
+        cell = document.getElementsByClassName("focused")[0];
+        row = parseInt(cell.dataset.r);
+        col = parseInt(cell.dataset.c);
+    }else{
+        cell = document.querySelector(`[data-r="${row}"][data-c="${col}"]`);
+    }
+    
+    //Add the peerId to cell's reveal pending
+    const key = `${row}, ${col}`;
+    if (!Object.hasOwn(pendingReveals, key)) pendingReveals[key] = new Set();
+    pendingReveals[key].add(peerId);
+
+    //Check if everyone has allowed reveal
+    if (pendingReveals[key].size == connections.length + 1){
+        revealLetter(row, col);
+    }else{
+        //Turn square red
+        cell.classList += " pending";
+        //Broadcast the square being red
+        broadcastOthers(peerId, {type:"revealPending", level: "letter", r: row, c: col});
+
+    }
+    
+}
+
+function revealWordPending(peerId, row=null, col=null, dir=null) {
+    let mainCell;
+    let wordCells;
+    //Get Main Cell
+    if(peerId === "host"){
+        mainCell = document.getElementsByClassName("focused")[0];
+        row = parseInt(mainCell.dataset.r);
+        col = parseInt(mainCell.dataset.c);
+        dir = direction;
+    }else{
+        mainCell = document.querySelector(`[data-r="${row}"][data-c="${col}"]`);
+    }
+
+    console.log(dir);
+
+    //Get all cells + reveal letter pendings on them
+    if (dir === 'across') {
+        let start = col;
+        while (start > 0 && !cells[row][start - 1].isBlack) start--;
+        let end = col;
+        while (end < cells[row].length - 1 && !cells[row][end + 1].isBlack) end++;
+        for (let cc = start; cc <= end; cc++){
+            revealLetterPending(peerId, row ,cc);
+        }
+    } else {
+        let start = row;
+        while (start > 0 && !cells[start - 1][col].isBlack) start--;
+        let end = row;
+        while (end < cells.length - 1 && !cells[end + 1][col].isBlack) end++;
+        for (let rr = start; rr <= end; rr++){
+            revealLetterPending(peerId, rr, col);
+        }
+    }
+
+
+
+}
+
+function revealLetter(row, col){
+    const sol = crossword.solution;
+    const idx = row * crossword.width + col;
+    if (sol[idx] === '.') return;   // black cell, ignore
+    if (cells[row] && cells[row][col] && !cells[row][col].isBlack) {
+        cells[row][col].inp.value = sol[idx];
+        cells[row][col].status.style.display = "";
+        cells[row][col].status.style.color = "#f00";
+    }
+    cells[row][col].div.classList.remove("pending");
+    broadcast({type:"revealLetter", r: row, c: col, value: sol[idx]});
+};    
+
+// ── Checking ────────────────────────────────────────────────────────────────────
+document.getElementById("checkPuzzle").addEventListener('click', () => {
+    console.log(crosswordString);
+});
 
 // Init player list with just the host
 renderPlayerList([{ username: hostUsername, isHost: true }]);

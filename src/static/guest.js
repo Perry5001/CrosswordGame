@@ -1,9 +1,10 @@
-import { buildGrid, cellSize, onFocus, setHighlightClue, setOnCellChange, applyRemoteCell, setOnPositionChange, applyRemoteCursor, removeRemoteCursor } from "./crossword.js";
+import { buildGrid, cellSize, cells, updateCellStatus, onFocus, setHighlightClue, setOnCellChange, applyRemoteCell, setOnPositionChange, applyRemoteCursor, removeRemoteCursor, direction } from "./crossword.js";
 
 // ── State ─────────────────────────────────────────────────────────────────────
 let cluesObjects  = [];
 let guestUsername = "Guest";
 let conn          = null;
+let peerId = "";
 
 const log = (msg) => {
     const el = document.getElementById("log");
@@ -24,6 +25,7 @@ setHighlightClue(highlightClue);
 // When guest types, send to host
 setOnCellChange((r, c, value) => {
     if (conn && conn.open) conn.send({ type: "cell", r, c, value });
+    updateCellStatus("self", r, c, value, peerId);
 });
 
 // When guest moves, send position to host
@@ -44,6 +46,23 @@ document.getElementById('guestUsername').addEventListener('keydown', (e) => {
     if (e.key === 'Enter') document.getElementById('setUsernameBtn').click();
 });
 
+// ── Game Code ──────────────────────────────────────────────────────────────────
+document.getElementById('joinBtn').addEventListener('click', () => {
+    const val = document.getElementById('gameCode').value.trim();
+    if (!val) return;
+    console.log(val.length);
+    if (val.length != 6) {document.getElementById('gameCodeStatus').textContent = `Game code must be 6 characters.`; return;}
+    hostID = val;
+    const currentUrl = new URL(window.location.href);
+    currentUrl.searchParams.set("id", hostID);
+    window.history.pushState({}, '', currentUrl);
+    createPeer();
+});
+
+document.getElementById('gameCode').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') document.getElementById('joinBtn').click();
+});
+
 // ── Player list ───────────────────────────────────────────────────────────────
 function renderPlayerList(players) {
     const ul = document.getElementById('player-list');
@@ -61,6 +80,7 @@ function renderPlayerList(players) {
 
 // ── Scoreboard ────────────────────────────────────────────────────────────────
 // Receives plain data from host: [{ peerId, username, score }, ...]
+//!!Need to change this to render the popup and not the list
 function renderScoreboard(scoreData) {
     const el = document.getElementById('scoreboard');
     if (!el) return;
@@ -73,12 +93,89 @@ function renderScoreboard(scoreData) {
     }
 }
 
+// ── Reveal ────────────────────────────────────────────────────────────────
+function initHelpSection(){
+    document.getElementById("revealLetter").addEventListener('click', () => {
+        revealLetterPending();
+    });
+
+    document.getElementById("revealWord").addEventListener('click', () => {
+        revealWordPending();
+    });
+
+    document.getElementById("revealPuzzle").addEventListener('click', () => {
+        //revealPuzzlePending();
+    });
+}
+
+//Letter
+function revealLetterPending(){
+    let cell = document.getElementsByClassName("focused")[0];
+    if (!cell) return;
+    let row = parseInt(cell.dataset.r);
+    let col = parseInt(cell.dataset.c);
+    if (conn && conn.open) conn.send({ type: "revealPending", level: "letter", r: row, c: col});
+    renderRevealLetterPending(row, col);
+}
+
+function renderRevealLetterPending(row, col){
+    let cell = document.querySelector(`[data-r="${row}"][data-c="${col}"]`);
+    //Turn square red
+    cell.classList.add("pending");
+}
+
+function revealLetter(row, col, value){
+    let cell = document.querySelector(`[data-r="${row}"][data-c="${col}"]`);
+    cell.classList.remove("pending");
+    if (cells[row] && cells[row][col] && !cells[row][col].isBlack) {
+        cells[row][col].inp.value = value;
+        cells[row][col].status.style.display = "";
+        cells[row][col].status.style.color = "#f00";
+    }
+}
+
+//Word
+function revealWordPending(){
+    let cell = document.getElementsByClassName("focused")[0];
+    if (!cell) return;
+    let row = parseInt(cell.dataset.r);
+    let col = parseInt(cell.dataset.c);
+    if (conn && conn.open) conn.send({ type: "revealPending", level: "word", r: row, c: col, dir: direction});
+    renderRevealWordPending(row, col, direction);
+}
+
+function renderRevealWordPending(row, col, dir){
+    let wordCells;
+    let mainCell = document.querySelector(`[data-r="${row}"][data-c="${col}"]`);
+
+    console.log(dir);
+    //Get all cells + reveal letter pendings on them
+    if (dir === 'across') {
+        let start = col;
+        while (start > 0 && !cells[row][start - 1].isBlack) start--;
+        let end = col;
+        while (end < cells[row].length - 1 && !cells[row][end + 1].isBlack) end++;
+        for (let cc = start; cc <= end; cc++){
+            renderRevealLetterPending(row ,cc);
+        }
+    } else {
+        let start = row;
+        while (start > 0 && !cells[start - 1][col].isBlack) start--;
+        let end = row;
+        while (end < cells.length - 1 && !cells[end + 1][col].isBlack){ console.log(end); end++;}
+        for (let rr = start; rr <= end; rr++){
+            renderRevealLetterPending(rr, col);
+        }
+    }
+}
+
 // ── Game screen ───────────────────────────────────────────────────────────────
 function showGame(crossword) {
     document.getElementById('lobby').style.display = 'none';
     document.getElementById('game').style.display  = 'block';
     document.getElementById('puzzle-title').textContent = crossword.title || "Crossword";
     renderPuzzle(crossword);
+    initHelpSection();
 }
 
 function renderPuzzle(cw) {
@@ -129,7 +226,7 @@ function clueOnClick(r, c, dir) {
 
 // ── PeerJS ────────────────────────────────────────────────────────────────────
 const urlParams = new URLSearchParams(window.location.search);
-const hostID    = urlParams.get('id');
+let hostID    = urlParams.get('id');
 
 async function createPeer() {
     const peer = new Peer({ config: { iceServers: [
@@ -186,7 +283,8 @@ async function createPeer() {
             } else if (data?.type === "player-list") {
                 renderPlayerList(data.players);
             } else if (data?.type === "cell") {
-                applyRemoteCell(data.r, data.c, data.value);
+                console.log(`${data.r}, ${data.c}: ${data.value} - ${data.peerId}`);
+                applyRemoteCell(data.r, data.c, data.value, data.peerId);
             } else if (data?.type === "scoreboard") {
                 renderScoreboard(data.scores);
             } else if (data?.type === "position") {
@@ -195,6 +293,18 @@ async function createPeer() {
                 } else {
                     applyRemoteCursor(data.peerId, data.username, data.r, data.c, data.dir);
                 }
+            } else if (data?.type === "revealPending") {
+                switch (data.level){
+                    case "letter":
+                        renderRevealLetterPending(data.r, data.c)
+                    case "word":
+
+                    case "puzzle":
+
+
+                }
+            } else if (data?.type === "revealLetter") {
+                revealLetter(data.r, data.c, data.value);
             }
         });
 
@@ -203,4 +313,7 @@ async function createPeer() {
     }
 }
 
-createPeer();
+if (hostID){
+    document.getElementById("gameCodeSection").style.display = "none";
+    createPeer();
+}

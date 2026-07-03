@@ -18,6 +18,15 @@
             <h2>Compete against your friends as you complete a crossword!</h2>
         </div>
 
+        <section class="lobby-section" id="gameCodeSection">
+            <label>Game Code</label>
+            <div class="row">
+                <input type="text" id="gameCode" placeholder="Enter the game code" maxlength="6">
+                <button id="joinBtn">Join</button>
+            </div>
+            <span id="gameCodeStatus" class="status-text"></span>
+        </section>
+
         <section class="lobby-section">
             <label>Your name</label>
             <div class="row">
@@ -29,7 +38,7 @@
 
         <section class="lobby-section">
             <label>Status</label>
-            <div id="log" class="status-text">Connecting…</div>
+            <div id="log" class="status-text">Please enter game code</div>
         </section>
 
         <section class="lobby-section">
@@ -45,6 +54,11 @@
 <div id="game" style="display:none;">
     <div class="header">
         <h1 id="puzzle-title">Crossword</h1>
+        <div id="help-buttons">
+            <button id="revealLetter">Reveal Letter</button>
+            <button id="revealWord">Reveal Word</button>
+            <button id="revealPuzzle">Reveal Puzzle</button>
+        </div>
         <ol id="scoreboard" style="list-style:none; padding: 0 2rem 0.5rem;"></ol>
     </div>
 

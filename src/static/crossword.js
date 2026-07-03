@@ -1,4 +1,5 @@
 // highlightClue is injected by the host/guest module so this file
+
 // doesn't need to know which page it's running on.
 let _highlightClue = () => {};
 export function setHighlightClue(fn) { _highlightClue = fn; }
@@ -8,9 +9,14 @@ let _onCellChange = () => {};
 export function setOnCellChange(fn) { _onCellChange = fn; }
 
 // Apply a remote cell update without firing _onCellChange (prevents echo)
-export function applyRemoteCell(r, c, value) {
+export function applyRemoteCell(r, c, value, peerId=null) {
     if (cells[r] && cells[r][c] && !cells[r][c].isBlack) {
         cells[r][c].inp.value = value;
+    }
+    checkSolve(r, c, value);
+    console.log(peerId);
+    if(peerId){
+        updateCellStatus(peerId, r, c, value);
     }
 }
 
@@ -22,7 +28,7 @@ export function setOnPositionChange(fn) { _onPositionChange = fn; }
 const remoteCursors = {};
 
 // Deterministic color from a peerId string
-function peerColor(peerId) {
+export function peerColor(peerId) {
     let hash = 0;
     for (let i = 0; i < peerId.length; i++) hash = peerId.charCodeAt(i) + ((hash << 5) - hash);
     const hue = Math.abs(hash) % 360;
@@ -108,14 +114,51 @@ export function removeRemoteCursor(peerId) {
     if (style) style.remove();
 }
 
+export function replaceAt(string, index, replacement) {
+    return string.substring(0, index) + replacement + string.substring(index + 1);
+}
+
+export function checkSolve(r, c, value){
+    if (value === ""){
+        value = "-";
+    }
+    crosswordString = replaceAt(crosswordString, r * cols + c, value.toUpperCase());
+    if(crosswordString === sol){
+        console.log("CROSSWORD COMPLETED");
+    }
+}
+
+// ── Cell Status ───────────────────────────────────────────────────────────────
+export function updateCellStatus(peerId, row, col, value){
+    if (value != ""){
+        let color;
+        if (peerId == "self"){
+            color = "#b5d4f4";
+        }else{
+            color = peerColor(peerId);
+        }
+        console.log(`${peerId}: ${color}`);
+        let cellStatus = document.querySelector(`[data-r="${row}"][data-c="${col}"]`).getElementsByClassName("cell-status")[0];
+        cellStatus.style.color = color;
+        cellStatus.style.display = "";
+    }else{
+        let cellStatus = document.querySelector(`[data-r="${row}"][data-c="${col}"]`).getElementsByClassName("cell-status")[0];
+        cellStatus.style.color = "";
+        cellStatus.style.display = "none";
+    }
+}
+
 let rows = 15, cols = 15;
 export let cells = [];
 let focusedR = -1, focusedC = -1;
-let direction = 'across';
+export let direction = 'across';
 export let cellSize = 40;
+export let crosswordString = "";
+let sol;
 let acrosses_clue_nums = [], downs_clue_nums = [];
 
-export function buildGrid(r, c, fill) {
+export function buildGrid(r, c, fill, solution) {
+    sol = solution;
     rows = r; cols = c;
     acrosses_clue_nums = []; downs_clue_nums = [];
     const grid = document.getElementById('grid');
@@ -136,6 +179,12 @@ export function buildGrid(r, c, fill) {
             numEl.className = 'cell-num';
             cell.appendChild(numEl);
 
+            const status = document.createElement('div');
+            status.className = 'cell-status';
+            status.innerHTML = '&bull;';
+            status.style.display = 'none';
+            cell.appendChild(status);
+
             const inp = document.createElement('input');
             inp.type = 'text';
             inp.maxLength = 2;
@@ -147,14 +196,17 @@ export function buildGrid(r, c, fill) {
 
             cell.addEventListener('mousedown', e => onCellClick(e, r, c));
             grid.appendChild(cell);
-            cells[r][c] = { div: cell, inp, isBlack: false, num: numEl };
+            cells[r][c] = { div: cell, inp, isBlack: false, num: numEl, status: status };
         }
     }
 
     for (let r = 0; r < rows; r++)
         for (let c = 0; c < cols; c++)
-            if (fill[r * cols + c] === '.')
+            if (fill[r * cols + c] === '.'){
                 toggleBlack(r, c);
+            }
+
+    crosswordString = fill;
 
     numberCells();
     numberCellClues();
@@ -219,6 +271,7 @@ function onInput(e, inp, r, c) {
     let val = inp.value.replace(/[^a-zA-Z]/g, '');
     if (val.length > 1) val = val[val.length - 1];
     inp.value = val.toUpperCase();
+    checkSolve(r, c, val.toUpperCase());
     _onCellChange(r, c, inp.value);
     if (val.length === 1) advance(r, c);
 }
@@ -239,11 +292,36 @@ function onKey(e, r, c) {
 function move(r, c, dr, dc, oldDir = direction, mode = "arrow") {
     let nr = r + dr, nc = c + dc;
     let update = false;
-    if (dr !== 0 && oldDir === 'across') { nr = r; update = true; }
-    else if (dc !== 0 && oldDir === 'down') { nc = c; update = true; }
-    else if (mode === "input" && ((nr < 0 || nr >= rows) || (nc < 0 || nc >= cols) || cells[nr][nc].isBlack)) {
-        nr = nr - dr; nc = nc - dc;
-    } else {
+    if (dr !== 0 && oldDir === 'across') { nr = r; update = true; } //If currently across and click up/down go down
+    else if (dc !== 0 && oldDir === 'down') { nc = c; update = true; } //If currently down and click left/right go across
+    else if (mode === "input" && ((nr < 0 || nr >= rows) || (nc < 0 || nc >= cols) || cells[nr][nc].isBlack)) {//If outside bounds or black go back
+        if((nr >= rows) || (nc >= cols) || cells[nr][nc].isBlack){
+            nr = nr - dr; nc = nc - dc;
+            let lr = nr, lc = nc;
+            let updated = false;
+            while((nr >= -1) && (nc >= -1)){
+                if(nr == -1 || nc == -1 || cells[nr][nc].isBlack){
+                    nr = nr + dr; nc = nc + dc;
+                    break;
+                }
+                nr = nr - dr; nc = nc - dc;
+            }
+            while((nr >= 0) && (nc >= 0)){
+                if(cells[nr][nc].inp.value===""){
+                    updated = true;
+                    if(cells[nr][nc].isBlack){
+                        updated = false;
+                    }
+                    break;
+                }
+                nr = nr + dr; nc = nc + dc;
+            }
+            if(!updated){
+                nr = lr, nc = lc;
+            }
+            update = true;
+        }
+    } else {//Keep going till in bounds and not black
         while (nr >= 0 && nr < rows && nc >= 0 && nc < cols && cells[nr][nc].isBlack) {
             nr += dr; nc += dc;
         }
@@ -271,6 +349,7 @@ function retreat(r, c) {
     const nr = r + dr, nc = c + dc;
     if (nr >= 0 && nr < rows && nc >= 0 && nc < cols && !cells[nr][nc].isBlack) {
         cells[nr][nc].inp.value = '';
+        checkSolve(nr, nc, "-");
         _onCellChange(nr, nc, '');
         cells[nr][nc].inp.focus();
     }
@@ -279,9 +358,18 @@ function retreat(r, c) {
 function advanceWord(r, c, step) {
     if (direction === 'across') {
         let index = acrosses_clue_nums.indexOf(cells[r][c].div.dataset.acrossClue) + step;
-        index = (index < 0 || index >= acrosses_clue_nums.length) ? index - step : index;
-        const clue_num = acrosses_clue_nums[index];
-        const clue = document.querySelector(`[data-num="${clue_num}"][data-dir="across"]`);
+        let clue_num;
+        let clue;
+        if (index < 0){
+            clue_num = downs_clue_nums[downs_clue_nums.length-1];
+            clue = document.querySelector(`[data-num="${clue_num}"][data-dir="down"]`);
+        }else if (index >= acrosses_clue_nums.length){
+            clue_num = downs_clue_nums[0];
+            clue = document.querySelector(`[data-num="${clue_num}"][data-dir="down"]`);
+        }else{
+            clue_num = acrosses_clue_nums[index];
+            clue = document.querySelector(`[data-num="${clue_num}"][data-dir="across"]`);
+        }
         cells[parseInt(clue.dataset.r)][parseInt(clue.dataset.c)].inp.focus();
     } else {
         let index = downs_clue_nums.indexOf(cells[r][c].div.dataset.downClue) + step;

@@ -179,7 +179,8 @@ input[type="file"] {
 .cell.white { cursor: text; }
 .cell.white:hover { background: #f0f0f0; }
 .cell.focused { background: #b5d4f4 !important; z-index: 1; }
-.cell.word-highlight { background: #ddeeff !important; }
+.cell.word-highlight { background: #ddeeff !important; z-index: 1;}
+.cell.pending { background: #f55b5b !important; z-index: 1; }
 
 /* Remote peer highlights are injected dynamically as rc-focused-{id} and
    rc-word-{id}. Local .focused always wins because it is declared later
@@ -193,6 +194,17 @@ input[type="file"] {
     line-height: 1;
     color: #555;
     font-weight: 500;
+    pointer-events: none;
+    z-index: 1;
+}
+
+.cell-status {
+    position: absolute;
+    top: 0px;
+    right: 3px;
+    font-size: 12px;
+    line-height: 1;
+    font-weight: 1000;
     pointer-events: none;
     z-index: 1;
 }
@@ -246,4 +258,10 @@ input[type="file"] {
     color: #888;
     margin-top: 8px;
     padding: 0 2rem 1rem;
+}
+
+
+/* ── Help Buttons ────────────────────────────────────────────────────── */
+#help-buttons{
+    margin: auto;
 }
