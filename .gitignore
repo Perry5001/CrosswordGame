@@ -1,5 +1,6 @@
 .venv/
 node_modules/
 __pycache__/
-*.DS_Store
+.DS_Store
+src/.DS_Store
 *.puz
