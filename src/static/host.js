@@ -331,10 +331,10 @@ function renderPlayerListGame() {
         if (peerId !== "host"){
             li.classList.add("non-host-player");
             li.title = `Click to kick ${s.username}`;
-            li.innerHTML = `<span>${s.username}: ${s.score}</span><span class="kick-icon">✕</span>`;
+            li.innerHTML = `${s.username}`;
             li.addEventListener('click', () => kickPlayer(peerId));
         } else {
-            li.textContent = `${s.username}: ${s.score}`;
+            li.textContent = `${s.username}`;
         }
         el.appendChild(li);
     }
