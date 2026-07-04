@@ -56,7 +56,7 @@ setOnPositionChange((r, c, dir) => {
 // ── PeerJS ────────────────────────────────────────────────────────────────────
 async function createPeer() {
     let hostid = Math.random().toString(36).slice(2, 8);
-    hostid = 987654
+    //hostid = 987654
     const peer = new Peer(hostid, { config: { iceServers: [
         {
             urls: "stun:stun.relay.metered.ca:80",
