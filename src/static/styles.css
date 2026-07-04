@@ -141,14 +141,20 @@ input[type="file"] {
     padding: 1.2rem 2rem 0.5rem;
 }
 
-#scoreboard{
+#player-list-game{
     display: flex;
     gap: 16px;
     margin-left: auto;
 }
 
-#scoreboard .user{
+#player-list-game .user{
     display: flex;
+}
+
+.non-host-player { cursor: pointer; display: flex; justify-content: space-between; }
+.non-host-player:hover {
+    color:#f00; 
+    text-decoration: line-through;
 }
 
 /* ── Grid layout ─────────────────────────────────────────────── */
@@ -265,3 +271,104 @@ input[type="file"] {
 #help-buttons{
     margin: auto;
 }
+
+/* ── Popups (reveal-puzzle confirmation, game over) ─────────────────────── */
+.popup {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.45);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    padding: 24px;
+}
+
+.popup-card {
+    background: #fff;
+    border-radius: 14px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.28);
+    padding: 32px 36px;
+    width: 100%;
+    max-width: 380px;
+    text-align: center;
+    animation: popup-in 0.15s ease-out;
+}
+
+@keyframes popup-in {
+    from { transform: scale(0.96); opacity: 0; }
+    to   { transform: scale(1);    opacity: 1; }
+}
+
+.popup-card h2 {
+    font-size: 20px;
+    font-weight: 600;
+    margin-bottom: 10px;
+}
+
+.popup-card p {
+    font-size: 13px;
+    color: #777;
+    margin-bottom: 16px;
+}
+
+#reveal-puzzle-status,
+#end-game-scores {
+    list-style: none;
+    margin: 0 0 20px;
+    padding: 0;
+    text-align: left;
+    max-height: 240px;
+    overflow-y: auto;
+}
+
+#reveal-puzzle-status li,
+#end-game-scores li {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 7px 12px;
+    background: #f5f4f0;
+    border-radius: 6px;
+    margin-bottom: 6px;
+    font-size: 13px;
+}
+
+#end-game-scores li.winner {
+    background: #fff3b0;
+    font-weight: 700;
+}
+
+#end-game-scores li .rank {
+    color: #999;
+    font-weight: 500;
+    margin-right: 8px;
+}
+
+.vote-check {
+    color: #2a8f2a;
+    font-weight: 700;
+}
+
+.vote-waiting {
+    color: #bbb;
+}
+
+.popup-actions {
+    display: flex;
+    gap: 10px;
+}
+
+.popup-actions button {
+    flex: 1;
+    padding: 9px 0;
+    font-weight: 600;
+}
+
+.popup-actions button.primary {
+    background: #1a1a1a;
+    color: #fff;
+    border-color: #1a1a1a;
+}
+.popup-actions button.primary:hover { background: #333; }
+.popup-actions button.primary:disabled { background: #ccc; border-color: #ccc; color: #f0f0f0; }

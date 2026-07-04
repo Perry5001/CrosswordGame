@@ -5,6 +5,7 @@ let cluesObjects  = [];
 let guestUsername = "Guest";
 let conn          = null;
 let peerId = "";
+let wasKicked = false;
 
 const log = (msg) => {
     const el = document.getElementById("log");
@@ -104,8 +105,51 @@ function initHelpSection(){
     });
 
     document.getElementById("revealPuzzle").addEventListener('click', () => {
-        //revealPuzzlePending();
+        if (conn && conn.open) conn.send({ type: "revealPuzzleRequest", username: guestUsername });
     });
+}
+
+// ── Reveal Puzzle popup (vote is coordinated by the host) ────────────────────
+document.getElementById('revealPuzzleYes').addEventListener('click', () => {
+    document.getElementById('revealPuzzleYes').disabled = true;
+    document.getElementById('revealPuzzleNo').disabled = true;
+    if (conn && conn.open) conn.send({ type: "revealPuzzleVote", vote: "yes" });
+});
+
+document.getElementById('revealPuzzleNo').addEventListener('click', () => {
+    if (conn && conn.open) conn.send({ type: "revealPuzzleVote", vote: "no" });
+    document.getElementById('reveal-puzzle').style.display = 'none';
+});
+
+function renderRevealPuzzleStatus(agreedPeerIds, allPlayers) {
+    const ul = document.getElementById('reveal-puzzle-status');
+    if (!ul) return;
+    ul.innerHTML = '';
+    for (const p of allPlayers) {
+        const li = document.createElement('li');
+        const agreed = agreedPeerIds.includes(p.peerId);
+        li.innerHTML = `<span>${p.username}</span><span class="${agreed ? 'vote-check' : 'vote-waiting'}">${agreed ? '✓' : '…'}</span>`;
+        ul.appendChild(li);
+    }
+}
+
+// ── Game Over popup ───────────────────────────────────────────────────────────
+document.getElementById('closeEndGame').addEventListener('click', () => {
+    document.getElementById('end-game').style.display = 'none';
+});
+
+function showEndGamePopup(scoreData) {
+    const sorted = [...scoreData].sort((a, b) => b.score - a.score);
+    const topScore = sorted[0]?.score;
+    const ol = document.getElementById('end-game-scores');
+    ol.innerHTML = '';
+    sorted.forEach((s, i) => {
+        const li = document.createElement('li');
+        if (s.score === topScore) li.classList.add('winner');
+        li.innerHTML = `<span><span class="rank">${i + 1}.</span>${s.username}</span><span>${s.score}</span>`;
+        ol.appendChild(li);
+    });
+    document.getElementById('end-game').style.display = 'flex';
 }
 
 //Letter
@@ -305,10 +349,34 @@ async function createPeer() {
                 }
             } else if (data?.type === "revealLetter") {
                 revealLetter(data.r, data.c, data.value);
+            } else if (data?.type === "revealPuzzlePopup") {
+                document.getElementById('reveal-puzzle-message').textContent =
+                    `${data.requester} wants to reveal the entire puzzle. Everyone must agree.`;
+                document.getElementById('reveal-puzzle-status').innerHTML = '';
+                document.getElementById('revealPuzzleYes').disabled = false;
+                document.getElementById('revealPuzzleNo').disabled = false;
+                document.getElementById('reveal-puzzle').style.display = 'flex';
+            } else if (data?.type === "revealPuzzleStatus") {
+                renderRevealPuzzleStatus(data.agreed, data.all);
+            } else if (data?.type === "revealPuzzleCancelled" || data?.type === "revealPuzzleDone") {
+                document.getElementById('reveal-puzzle').style.display = 'none';
+            } else if (data?.type === "gameOver") {
+                showEndGamePopup(data.scores);
+            } else if (data?.type === "kicked") {
+                wasKicked = true;
             }
         });
 
-        conn.on('close', () => { log("❌ Disconnected from host"); conn = null; });
+        conn.on('close', () => {
+            if (wasKicked) {
+                log("🚫 You were removed from the game by the host.");
+                document.getElementById('game').style.display = 'none';
+                document.getElementById('lobby').style.display = 'flex';
+            } else {
+                log("❌ Disconnected from host");
+            }
+            conn = null;
+        });
         conn.on('error', (err) => log(`⚠️ ${err}`));
     }
 }

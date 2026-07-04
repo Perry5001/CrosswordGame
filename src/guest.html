@@ -59,7 +59,7 @@
             <button id="revealWord">Reveal Word</button>
             <button id="revealPuzzle">Reveal Puzzle</button>
         </div>
-        <ol id="scoreboard" style="list-style:none; padding: 0 2rem 0.5rem;"></ol>
+        <ol id="player-list-game" style="list-style:none; padding: 0 2rem 0.5rem;"></ol>
     </div>
 
     <div class="grid-wrap">
@@ -77,6 +77,31 @@
     </div>
 
     <div id="hint">Click a white square to start typing. Arrow keys to navigate.</div>
+</div>
+
+<!-- ── REVEAL PUZZLE CONFIRMATION ───────────────────────────── -->
+<div id="reveal-puzzle" class="popup" style="display:none;">
+    <div class="popup-card">
+        <h2>Reveal the whole puzzle?</h2>
+        <p id="reveal-puzzle-message">Everyone must agree before the puzzle is revealed.</p>
+        <ul id="reveal-puzzle-status"></ul>
+        <div class="popup-actions">
+            <button id="revealPuzzleYes" class="primary">Yes, reveal</button>
+            <button id="revealPuzzleNo">No, cancel</button>
+        </div>
+    </div>
+</div>
+
+<!-- ── END ──────────────────────────────────────────────────── -->
+<div id="end-game" class="popup" style="display:none;">
+    <div class="popup-card">
+        <h2>Puzzle Complete!</h2>
+        <p>Final scores</p>
+        <ol id="end-game-scores"></ol>
+        <div class="popup-actions">
+            <button id="closeEndGame" class="primary">Close</button>
+        </div>
+    </div>
 </div>
 
 </body>

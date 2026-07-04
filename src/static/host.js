@@ -1,4 +1,4 @@
-import { buildGrid, cellSize, onFocus, updateCellStatus, setHighlightClue, setOnCellChange, applyRemoteCell, cells, setOnPositionChange, applyRemoteCursor, removeRemoteCursor, crosswordString, direction, peerColor} from "./crossword.js";
+import { buildGrid, cellSize, onFocus, updateCellStatus, setHighlightClue, setOnCellChange, applyRemoteCell, cells, setOnPositionChange, applyRemoteCursor, removeRemoteCursor, crosswordString, direction, peerColor, checkSolve } from "./crossword.js";
 
 const API_BASE = window.location.hostname.includes("127.0.0.1")
     ? "http://127.0.0.1:5000"
@@ -21,7 +21,13 @@ let correctCells = {};
 
 //pendingReveals: tracks which players have asked to reveal which cells
 // { "r,c" as string : [peerID_1, peerID_2, ...]}
+// pendingReveals["puzzle"] is reused (as a Set of peerIds) to track votes
+// for a full-puzzle reveal.
 let pendingReveals = {};
+
+// gameOver: true once the puzzle has been fully solved/revealed and the
+// end-game popup has been broadcast, so we don't fire it more than once.
+let gameOver = false;
 
 // ── Clue highlighting ─────────────────────────────────────────────────────────
 function highlightClue(r, c, clueNum = null, dir) {
@@ -39,6 +45,7 @@ setOnCellChange((r, c, value) => {
     broadcast({ type: "cell", r, c, value, peerId: "host"});
     recalculateScore("host", r, c, value);
     updateCellStatus("self", r, c, value);
+    checkGameOverCondition();
 });
 
 // When host moves, broadcast position
@@ -49,7 +56,7 @@ setOnPositionChange((r, c, dir) => {
 // ── PeerJS ────────────────────────────────────────────────────────────────────
 async function createPeer() {
     let hostid = Math.random().toString(36).slice(2, 8);
-    //hostid = 987654
+    hostid = 987654
     const peer = new Peer(hostid, { config: { iceServers: [
         {
             urls: "stun:stun.relay.metered.ca:80",
@@ -104,7 +111,7 @@ async function createPeer() {
                 // Add to scoreboard when joining mid-game
                 scores[entry.peerId] = { username: entry.username, score: 0 };
                 correctCells[entry.peerId] = new Set();
-                renderScoreboard();
+                renderPlayerListGame();
                 broadcastScoreboard();
             }
             broadcastPlayerList();
@@ -114,7 +121,7 @@ async function createPeer() {
             switch (data?.type){
                 case "join":
                     entry.username = data.username || "Guest";
-                    renderScoreboard();
+                    renderPlayerListGame();
                     broadcastPlayerList();
                     break;
                 case "username":
@@ -122,7 +129,7 @@ async function createPeer() {
                     // Update name in scores if game already running
                     if (scores[entry.peerId]) {
                         scores[entry.peerId].username = entry.username;
-                        renderScoreboard();
+                        renderPlayerListGame();
                         broadcastScoreboard();
                     }
                     broadcastPlayerList();
@@ -137,6 +144,13 @@ async function createPeer() {
                     }
                     // Recalculate this guest's score
                     recalculateScore(entry.peerId, data.r, data.c, data.value);
+                    checkGameOverCondition();
+                    break;
+                case "revealPuzzleRequest":
+                    requestRevealPuzzle(entry.peerId, entry.username);
+                    break;
+                case "revealPuzzleVote":
+                    voteRevealPuzzle(entry.peerId, data.vote);
                     break;
                 case "position":
                     // Show this guest's cursor on the host's grid
@@ -169,6 +183,16 @@ async function createPeer() {
             broadcast({ type: "position", peerId: entry.peerId, username: '', r: -1, c: -1 });
             broadcastPlayerList();
             broadcastScoreboard();
+            renderPlayerListGame();
+            // If they were part of an in-progress reveal-puzzle vote, drop
+            // them from it and re-check whether everyone remaining agrees.
+            if (pendingReveals["puzzle"]) {
+                pendingReveals["puzzle"].delete(entry.peerId);
+                updateRevealPuzzleStatus();
+                if (pendingReveals["puzzle"].size === totalPlayers()) {
+                    performRevealPuzzle();
+                }
+            }
         });
     });
 }
@@ -189,6 +213,48 @@ function broadcastOthers(peerId, msg) {
         }
     }
 }
+
+// Kick a connected guest. Confirms with the host, tells the guest why their
+// connection is closing, then closes it. All bookkeeping (removing them from
+// scores/correctCells/connections, clearing remote cursors, re-broadcasting
+// the player list & scoreboard, and settling any in-progress reveal-puzzle
+// vote) is already handled by the conn.on('close') listener, so we don't
+// duplicate it here — we just trigger the close.
+// kickTargetPeerId: peerId currently awaiting confirmation in the kick popup
+let kickTargetPeerId = null;
+
+function kickPlayer(peerId) {
+    if (peerId === "host") return; // can't kick yourself
+    const entry = connections.find(e => e.peerId === peerId);
+    if (!entry) return;
+
+    kickTargetPeerId = peerId;
+    document.getElementById('kick-confirm-message').textContent =
+        `Are you sure you want to remove ${entry.username} from the game?`;
+    document.getElementById('kick-confirm').style.display = 'flex';
+}
+
+document.getElementById('kickConfirmYes').addEventListener('click', () => {
+    document.getElementById('kick-confirm').style.display = 'none';
+    if (!kickTargetPeerId) return;
+    const entry = connections.find(e => e.peerId === kickTargetPeerId);
+    kickTargetPeerId = null;
+    if (!entry) return;
+
+    if (entry.conn.open) {
+        entry.conn.send({ type: "kicked" });
+        // Give the message a moment to actually go out over the data
+        // channel before we tear it down.
+        setTimeout(() => entry.conn.close(), 150);
+    } else {
+        entry.conn.close();
+    }
+});
+
+document.getElementById('kickConfirmNo').addEventListener('click', () => {
+    kickTargetPeerId = null;
+    document.getElementById('kick-confirm').style.display = 'none';
+});
 
 function broadcastPlayerList() {
     const players = [
@@ -255,20 +321,27 @@ function broadcastScoreboard() {
     broadcast({ type: "scoreboard", scores: scoreData });
 }
 
-//!!Need to change this to render the popup and not the list
-function renderScoreboard() {
-    const el = document.getElementById('scoreboard');
+function renderPlayerListGame() {
+    const el = document.getElementById('player-list-game');
     if (!el) return;
     el.innerHTML = '';
     for (const [peerId, s] of Object.entries(scores)) {
         const li = document.createElement('li');
-        li.textContent = `${s.username}: ${s.score}`;
         li.dataset.peerId = peerId;
+        if (peerId !== "host"){
+            li.classList.add("non-host-player");
+            li.title = `Click to kick ${s.username}`;
+            li.innerHTML = `<span>${s.username}: ${s.score}</span><span class="kick-icon">✕</span>`;
+            li.addEventListener('click', () => kickPlayer(peerId));
+        } else {
+            li.textContent = `${s.username}: ${s.score}`;
+        }
         el.appendChild(li);
     }
 }
 
 function initScoreboard() {
+    gameOver = false;
     scores = {};
     correctCells = {};
     // Add host
@@ -280,6 +353,7 @@ function initScoreboard() {
         correctCells[entry.peerId] = new Set();
     }
     correctCells["revealed"] = new Set();
+    renderPlayerListGame();
     //renderScoreboard();
     //broadcastScoreboard();
 }
@@ -605,7 +679,21 @@ document.getElementById("revealWord").addEventListener('click', () => {
 });
 
 document.getElementById("revealPuzzle").addEventListener('click', () => {
-    //revealPuzzlePending();
+    requestRevealPuzzle("host", hostUsername);
+});
+
+document.getElementById("revealPuzzleYes").addEventListener('click', () => {
+    document.getElementById("revealPuzzleYes").disabled = true;
+    document.getElementById("revealPuzzleNo").disabled = true;
+    voteRevealPuzzle("host", "yes");
+});
+
+document.getElementById("revealPuzzleNo").addEventListener('click', () => {
+    voteRevealPuzzle("host", "no");
+});
+
+document.getElementById("closeEndGame").addEventListener('click', () => {
+    document.getElementById("end-game").style.display = "none";
 });
 
 function revealLetterPending(peerId, row=null, col=null) {
@@ -684,8 +772,121 @@ function revealLetter(row, col){
         cells[row][col].status.style.color = "#f00";
     }
     cells[row][col].div.classList.remove("pending");
+    // Keep the shared solve-tracking string in sync so reveals (not just
+    // typing) can trigger the game-over check below.
+    checkSolve(row, col, sol[idx]);
     broadcast({type:"revealLetter", r: row, c: col, value: sol[idx]});
-};    
+    checkGameOverCondition();
+};
+
+// ── Reveal Puzzle (unanimous vote + popup) ─────────────────────────────────────
+function totalPlayers() {
+    return connections.length + 1; // + host
+}
+
+function usernameFor(peerId) {
+    if (peerId === "host") return hostUsername;
+    return connections.find(e => e.peerId === peerId)?.username ?? "Guest";
+}
+
+function requestRevealPuzzle(requesterPeerId, requesterUsername) {
+    if (pendingReveals["puzzle"]) return; // a vote is already in progress
+    pendingReveals["puzzle"] = new Set([requesterPeerId]);
+    showRevealPuzzlePopup(requesterUsername);
+    broadcast({ type: "revealPuzzlePopup", requester: requesterUsername });
+    updateRevealPuzzleStatus();
+}
+
+function voteRevealPuzzle(peerId, vote) {
+    if (!pendingReveals["puzzle"]) return;
+    if (vote === "no") {
+        cancelRevealPuzzle();
+        return;
+    }
+    pendingReveals["puzzle"].add(peerId);
+    updateRevealPuzzleStatus();
+    if (pendingReveals["puzzle"].size === totalPlayers()) {
+        performRevealPuzzle();
+    }
+}
+
+function cancelRevealPuzzle() {
+    delete pendingReveals["puzzle"];
+    hideRevealPuzzlePopup();
+    broadcast({ type: "revealPuzzleCancelled" });
+}
+
+function performRevealPuzzle() {
+    delete pendingReveals["puzzle"];
+    hideRevealPuzzlePopup();
+    broadcast({ type: "revealPuzzleDone" });
+    for (let r = 0; r < crossword.height; r++) {
+        for (let c = 0; c < crossword.width; c++) {
+            if (crossword.solution[r * crossword.width + c] === '.') continue;
+            revealLetter(r, c);
+        }
+    }
+}
+
+function updateRevealPuzzleStatus() {
+    const set = pendingReveals["puzzle"];
+    if (!set) return;
+    const allPeerIds    = ["host", ...connections.map(e => e.peerId)];
+    const allPlayers    = allPeerIds.map(pid => ({ peerId: pid, username: usernameFor(pid) }));
+    const agreedPeerIds = [...set];
+    renderRevealPuzzleStatus(agreedPeerIds, allPlayers);
+    broadcast({ type: "revealPuzzleStatus", agreed: agreedPeerIds, all: allPlayers });
+}
+
+function renderRevealPuzzleStatus(agreedPeerIds, allPlayers) {
+    const ul = document.getElementById('reveal-puzzle-status');
+    if (!ul) return;
+    ul.innerHTML = '';
+    for (const p of allPlayers) {
+        const li = document.createElement('li');
+        const agreed = agreedPeerIds.includes(p.peerId);
+        li.innerHTML = `<span>${p.username}</span><span class="${agreed ? 'vote-check' : 'vote-waiting'}">${agreed ? '✓' : '…'}</span>`;
+        ul.appendChild(li);
+    }
+}
+
+function showRevealPuzzlePopup(requesterUsername) {
+    document.getElementById('reveal-puzzle-message').textContent =
+        `${requesterUsername} wants to reveal the entire puzzle. Everyone must agree.`;
+    document.getElementById('revealPuzzleYes').disabled = false;
+    document.getElementById('revealPuzzleNo').disabled = false;
+    document.getElementById('reveal-puzzle').style.display = 'flex';
+}
+
+function hideRevealPuzzlePopup() {
+    document.getElementById('reveal-puzzle').style.display = 'none';
+}
+
+// ── Game Over ───────────────────────────────────────────────────────────────
+function checkGameOverCondition() {
+    if (gameOver || !crossword?.solution) return;
+    if (crosswordString !== crossword.solution) return;
+    gameOver = true;
+    const scoreData = Object.entries(scores).map(([peerId, s]) => ({
+        peerId, username: s.username, score: s.score
+    }));
+    broadcast({ type: "gameOver", scores: scoreData });
+    showEndGamePopup(scoreData);
+}
+
+function showEndGamePopup(scoreData) {
+    const sorted = [...scoreData].sort((a, b) => b.score - a.score);
+    const topScore = sorted[0]?.score;
+    const ol = document.getElementById('end-game-scores');
+    ol.innerHTML = '';
+    sorted.forEach((s, i) => {
+        const li = document.createElement('li');
+        if (s.score === topScore) li.classList.add('winner');
+        li.innerHTML = `<span><span class="rank">${i + 1}.</span>${s.username}</span><span>${s.score}</span>`;
+        ol.appendChild(li);
+    });
+    document.getElementById('end-game').style.display = 'flex';
+}
 
 // ── Checking ────────────────────────────────────────────────────────────────────
 document.getElementById("checkPuzzle").addEventListener('click', () => {
