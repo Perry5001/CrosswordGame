@@ -19,6 +19,13 @@ let scores = {};
 // { [peerId]: Set of "r,c" strings }
 let correctCells = {};
 
+// cellState: authoritative record of every cell that's been touched this
+// game — { "r,c": { value, owner } } where owner is "host", a guest peerId,
+// or "revealed" (for cells filled via reveal, which render in red rather
+// than a per-player color). This is what lets a guest who joins mid-game
+// see the current fill state instead of a blank grid.
+let cellState = {};
+
 //pendingReveals: tracks which players have asked to reveal which cells
 // { "r,c" as string : [peerID_1, peerID_2, ...]}
 // pendingReveals["puzzle"] is reused (as a Set of peerIds) to track votes
@@ -45,6 +52,7 @@ setOnCellChange((r, c, value) => {
     broadcast({ type: "cell", r, c, value, peerId: "host"});
     recalculateScore("host", r, c, value);
     updateCellStatus("self", r, c, value);
+    cellState[`${r},${c}`] = { value, owner: "host" };
     checkGameOverCondition();
 });
 
@@ -107,7 +115,13 @@ async function createPeer() {
 
         conn.on('open', () => {
             if (gameStarted && crossword) {
-                conn.send({ type: "start", crossword });
+                const gridState = Object.entries(cellState)
+                    .filter(([, s]) => s.value !== "")
+                    .map(([key, s]) => {
+                        const [r, c] = key.split(',').map(Number);
+                        return { r, c, value: s.value, owner: s.owner };
+                    });
+                conn.send({ type: "start", crossword, gridState });
                 // Add to scoreboard when joining mid-game
                 scores[entry.peerId] = { username: entry.username, score: 0 };
                 correctCells[entry.peerId] = new Set();
@@ -136,6 +150,7 @@ async function createPeer() {
                     break;
                 case "cell":
                     applyRemoteCell(data.r, data.c, data.value, entry.peerId);
+                    cellState[`${data.r},${data.c}`] = { value: data.value, owner: entry.peerId };
                     // Relay to all other guests
                     for (const other of connections) {
                         if (other !== entry && other.conn.open) {
@@ -344,6 +359,7 @@ function initScoreboard() {
     gameOver = false;
     scores = {};
     correctCells = {};
+    cellState = {};
     // Add host
     scores["host"] = { username: hostUsername, score: 0 };
     correctCells["host"] = new Set();
@@ -772,6 +788,7 @@ function revealLetter(row, col){
         cells[row][col].status.style.color = "#f00";
     }
     cells[row][col].div.classList.remove("pending");
+    cellState[`${row},${col}`] = { value: sol[idx], owner: "revealed" };
     // Keep the shared solve-tracking string in sync so reveals (not just
     // typing) can trigger the game-over check below.
     checkSolve(row, col, sol[idx]);

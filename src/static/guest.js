@@ -214,16 +214,32 @@ function renderRevealWordPending(row, col, dir){
 }
 
 // ── Game screen ───────────────────────────────────────────────────────────────
-function showGame(crossword) {
+function showGame(crossword, gridState) {
     document.getElementById('lobby').style.display = 'none';
     document.getElementById('game').style.display  = 'block';
     document.getElementById('puzzle-title').textContent = crossword.title || "Crossword";
     renderPuzzle(crossword);
     initHelpSection();
+    if (gridState) applyGridState(gridState);
+}
+
+// Replay the host's cell-state snapshot (sent when joining mid-game) so the
+// grid shows everyone's progress instead of starting blank. Reuses the same
+// functions that handle live updates so the colors/statuses end up identical
+// to what they'd be if we'd been connected the whole time.
+function applyGridState(gridState) {
+    for (const { r, c, value, owner } of gridState) {
+        if (!value) continue;
+        if (owner === "revealed") {
+            revealLetter(r, c, value);
+        } else {
+            applyRemoteCell(r, c, value, owner);
+        }
+    }
 }
 
 function renderPuzzle(cw) {
-    buildGrid(cw.width, cw.height, cw.fill);
+    buildGrid(cw.width, cw.height, cw.fill, cw.solution);
     const acrosslist = document.getElementById('acrossList');
     const downlist   = document.getElementById('downList');
     acrosslist.style.height    = cellSize * cw.height - 28 + 'px';
@@ -323,7 +339,7 @@ async function createPeer() {
 
         conn.on('data', (data) => {
             if (data?.type === "start" && data.crossword) {
-                showGame(data.crossword);
+                showGame(data.crossword, data.gridState);
             } else if (data?.type === "player-list") {
                 renderPlayerList(data.players);
             } else if (data?.type === "cell") {
